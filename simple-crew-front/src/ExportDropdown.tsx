@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { ChevronDown, FileJson, Code2 } from 'lucide-react';
+import { Download, Code, FileText, ChevronDown } from 'lucide-react';
 import { useStore } from './store';
 
 export function ExportDropdown() {
@@ -13,49 +13,55 @@ export function ExportDropdown() {
         setIsOpen(false);
       }
     }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   return (
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition-all shadow-sm hover:shadow"
+        className="flex items-center gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-md active:scale-95 duration-200"
       >
-        Export Code
+        <Download className="w-4 h-4 shrink-0" />
+        <span>Export</span>
         <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-xl border border-gray-100 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2">
-          <div className="py-1">
-            <button
-              onClick={() => {
-                exportProjectJson();
-                setIsOpen(false);
-              }}
-              className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-3 transition-colors"
-            >
-              <FileJson className="w-4 h-4" />
-              <div className="flex flex-col">
-                <span className="font-medium">SimpleCrew Config</span>
-                <span className="text-xs text-gray-400">Download config JSON</span>
-              </div>
-            </button>
-            <button
-              disabled
-              className="w-full text-left px-4 py-3 text-sm text-gray-400 flex items-center gap-3 opacity-60 cursor-not-allowed border-t border-gray-50"
-            >
-              <Code2 className="w-4 h-4" />
-              <div className="flex flex-col">
-                <span className="font-medium">Python Code</span>
-                <span className="text-xs bg-gray-100 px-1 inline-block rounded w-fit mt-0.5">Coming Soon</span>
-              </div>
-            </button>
+        <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl z-50 py-2 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-700 mb-1">
+            <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Export Options</span>
           </div>
+          
+          <button
+            onClick={() => {
+              exportProjectJson();
+              setIsOpen(false);
+            }}
+            className="w-full flex items-center justify-between px-4 py-2.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors group"
+          >
+            <div className="flex items-center gap-3">
+              <Download className="w-4 h-4 text-slate-400 group-hover:text-blue-500 transition-colors" />
+              <span className="font-medium">JSON Config</span>
+            </div>
+          </button>
+
+          <button className="w-full flex items-center justify-between px-4 py-2.5 text-sm text-slate-400 dark:text-slate-500 cursor-not-allowed group opacity-60">
+            <div className="flex items-center gap-3">
+              <Code className="w-4 h-4" />
+              <span className="font-medium">Python Script</span>
+            </div>
+            <span className="text-[9px] font-bold bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-slate-400 dark:text-slate-600 uppercase">Coming Soon</span>
+          </button>
+
+          <button className="w-full flex items-center justify-between px-4 py-2.5 text-sm text-slate-400 dark:text-slate-500 cursor-not-allowed group opacity-60">
+            <div className="flex items-center gap-3">
+              <FileText className="w-4 h-4" />
+              <span className="font-medium">PDF Report</span>
+            </div>
+            <span className="text-[9px] font-bold bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-slate-400 dark:text-slate-600 uppercase">Coming Soon</span>
+          </button>
         </div>
       )}
     </div>

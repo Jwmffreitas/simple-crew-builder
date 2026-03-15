@@ -40,20 +40,20 @@ function SortableItem({ id, name }: { id: string; name: string }) {
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex items-center gap-3 p-2.5 bg-white border rounded-md mb-2 transition-shadow ${
+      className={`flex items-center gap-3 p-2.5 bg-brand-card border rounded-lg mb-2 transition-shadow ${
         isDragging 
-          ? 'opacity-90 ring-2 ring-blue-500 shadow-lg border-blue-200' 
-          : 'border-gray-200 shadow-sm hover:border-gray-300'
+          ? 'opacity-90 ring-2 ring-blue-500 dark:ring-blue-400 shadow-lg border-blue-200 dark:border-blue-800' 
+          : 'border-brand-border shadow-sm hover:border-blue-400 dark:hover:border-blue-500'
       }`}
     >
       <div 
         {...attributes} 
         {...listeners} 
-        className="cursor-grab active:cursor-grabbing hover:bg-gray-100 p-1.5 rounded text-gray-400 hover:text-gray-600 transition-colors"
+        className="cursor-grab active:cursor-grabbing hover:bg-brand-bg p-1.5 rounded text-brand-muted hover:text-brand-text transition-colors"
       >
         <GripVertical className="w-4 h-4" />
       </div>
-      <span className="text-sm font-medium text-gray-700 truncate">{name}</span>
+      <span className="text-sm font-medium text-brand-text truncate">{name}</span>
     </div>
   );
 }
@@ -223,28 +223,28 @@ export function NodeConfigDrawer() {
   };
 
   return (
-    <div className="absolute right-0 top-0 h-full w-96 bg-white shadow-[-10px_0_30px_rgba(0,0,0,0.1)] z-50 flex flex-col border-l border-gray-200">
-      <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between bg-slate-50">
-        <h2 className="text-lg font-semibold text-gray-800 capitalize">
+    <div className="absolute right-0 top-0 h-full w-96 bg-brand-card shadow-[-20px_0_50px_rgba(0,0,0,0.1)] dark:shadow-[-20px_0_50px_rgba(0,0,0,0.3)] z-50 flex flex-col border-l border-brand-border transition-all duration-300">
+      <div className="px-5 py-4 border-b border-brand-border flex items-center justify-between bg-brand-bg/50">
+        <h2 className="text-lg font-bold text-brand-text capitalize tracking-tight">
           {type} Configuration
         </h2>
         <button
           onClick={() => setActiveNode(null)}
-          className="p-1 hover:bg-gray-200 rounded-md transition-colors"
+          className="p-2 hover:bg-brand-bg rounded-lg transition-colors group"
         >
-          <X className="w-5 h-5 text-gray-500" />
+          <X className="w-5 h-5 text-brand-muted group-hover:text-brand-text" />
         </button>
       </div>
 
       <div className="p-6 flex-1 overflow-y-auto">
         {(type === 'agent' || type === 'task') && (
-          <div className="flex flex-col gap-1.5 mb-6 pb-6 border-b border-gray-100">
-            <label className="text-sm font-semibold text-gray-700">Name</label>
+          <div className="flex flex-col gap-2 mb-6 pb-6 border-b border-brand-border/50">
+            <label className="text-xs font-bold text-brand-muted uppercase tracking-wider">Name</label>
             <input
-              className={`border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 transition-colors ${
+              className={`border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 transition-all duration-200 ${
                 nameError
-                  ? 'border-red-500 focus:ring-red-500 bg-red-50 text-red-900'
-                  : 'border-gray-300 focus:ring-blue-500 bg-white text-gray-800'
+                  ? 'border-red-500 focus:ring-red-500 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400'
+                  : 'border-brand-border focus:ring-blue-500 dark:focus:ring-blue-400 bg-brand-bg text-brand-text'
               }`}
               value={localName}
               onChange={handleNameChange}
@@ -260,46 +260,46 @@ export function NodeConfigDrawer() {
 
         {type === 'agent' && (
           <div className="flex flex-col gap-5">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-semibold text-gray-700">Role</label>
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-bold text-brand-muted uppercase tracking-wider">Role</label>
               <input
-                className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                className="border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 bg-brand-bg text-brand-text transition-all"
                 value={(data as any).role || ''}
-                onChange={(e) => updateNodeData(activeNodeId, { role: e.target.value })}
+                onChange={(e) => updateNodeData(activeNode.id, { role: e.target.value })}
                 placeholder="e.g. Senior Researcher"
               />
             </div>
 
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-semibold text-gray-700">Goal</label>
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-bold text-brand-muted uppercase tracking-wider">Goal</label>
               <textarea
-                className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[100px] resize-none transition-colors"
+                className="border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 bg-brand-bg text-brand-text min-h-[80px] resize-none transition-all"
                 value={(data as any).goal || ''}
-                onChange={(e) => updateNodeData(activeNodeId, { goal: e.target.value })}
+                onChange={(e) => updateNodeData(activeNode.id, { goal: e.target.value })}
                 placeholder="What does this agent need to achieve?"
               />
             </div>
 
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-semibold text-gray-700">Backstory</label>
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-bold text-brand-muted uppercase tracking-wider">Backstory</label>
               <textarea
-                className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[150px] resize-none transition-colors"
+                className="border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 bg-brand-bg text-brand-text min-h-[120px] resize-none transition-all"
                 value={(data as any).backstory || ''}
-                onChange={(e) => updateNodeData(activeNodeId, { backstory: e.target.value })}
+                onChange={(e) => updateNodeData(activeNode.id, { backstory: e.target.value })}
                 placeholder="The agent's background and expertise..."
               />
             </div>
 
             {/* -- Tasks Execution Order Ranking -- */}
-            <div className="flex flex-col gap-1.5 pt-4 border-t border-gray-100">
-              <h3 className="text-sm font-semibold text-gray-700 mb-1">Execution Order (Tasks)</h3>
-              <p className="text-xs text-gray-500 mb-3">
-                Drag and drop to rearrange the task priority.
+            <div className="flex flex-col gap-2 pt-4 border-t border-brand-border/50">
+              <h3 className="text-xs font-bold text-brand-muted uppercase tracking-wider mb-1">Execution (Tasks)</h3>
+              <p className="text-[11px] text-brand-muted opacity-80 mb-3">
+                Drag to rearrange task execution priority.
               </p>
               
               {renderableTasks.length === 0 ? (
-                <div className="text-xs text-gray-400 italic bg-gray-50 p-3 rounded-md text-center border border-gray-100 cursor-not-allowed">
-                  Connect tasks to this Agent to see them here.
+                <div className="text-xs text-brand-muted italic bg-brand-bg/50 rounded-lg p-6 text-center border border-dashed border-brand-border">
+                  Connect tasks to see them here.
                 </div>
               ) : (
                 <DndContext
@@ -328,23 +328,22 @@ export function NodeConfigDrawer() {
         )}
 
         {type === 'task' && (
-          <div className="flex flex-col gap-5">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-semibold text-gray-700">Description</label>
+          <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-bold text-brand-muted uppercase tracking-wider">Description</label>
               <textarea
-                className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[120px] resize-none transition-colors"
+                className="border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 bg-brand-bg text-brand-text min-h-[100px] resize-none transition-all"
                 value={(data as any).description || ''}
-                onChange={(e) => updateNodeData(activeNodeId, { description: e.target.value })}
+                onChange={(e) => updateNodeData(activeNode.id, { description: e.target.value })}
                 placeholder="What exactly needs to be done?"
               />
             </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-semibold text-gray-700">Expected Output</label>
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-bold text-brand-muted uppercase tracking-wider">Expected Output</label>
               <textarea
-                className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[100px] resize-none transition-colors"
+                className="border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 bg-brand-bg text-brand-text min-h-[80px] resize-none transition-all"
                 value={(data as any).expected_output || ''}
-                onChange={(e) => updateNodeData(activeNodeId, { expected_output: e.target.value })}
+                onChange={(e) => updateNodeData(activeNode.id, { expected_output: e.target.value })}
                 placeholder="What should this task produce?"
               />
             </div>
@@ -352,32 +351,32 @@ export function NodeConfigDrawer() {
         )}
 
         {type === 'crew' && (
-          <div className="flex flex-col gap-5">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-semibold text-gray-700">Process</label>
+          <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-bold text-brand-muted uppercase tracking-wider">Process</label>
               <select
-                className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 bg-white transition-colors"
+                className="border border-brand-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 bg-brand-bg text-brand-text transition-all appearance-none cursor-pointer"
                 value={(data as any).process || 'sequential'}
-                onChange={(e) => updateNodeData(activeNodeId, { process: e.target.value as ProcessType })}
+                onChange={(e) => updateNodeData(activeNode.id, { process: e.target.value as ProcessType })}
               >
                 <option value="sequential">Sequential</option>
                 <option value="hierarchical">Hierarchical</option>
               </select>
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-[11px] text-brand-muted opacity-80 mt-1">
                 Sequential processes execute tasks in order. Hierarchical needs a Manager Agent.
               </p>
             </div>
             
             {/* -- Agents Execution Order Ranking -- */}
-            <div className="flex flex-col gap-1.5 pt-4 border-t border-gray-100">
-              <h3 className="text-sm font-semibold text-gray-700 mb-1">Execution Order (Agents)</h3>
-              <p className="text-xs text-gray-500 mb-3">
-                Drag and drop to rearrange the execution priority.
+            <div className="flex flex-col gap-2 pt-4 border-t border-brand-border/50">
+              <h3 className="text-xs font-bold text-brand-muted uppercase tracking-wider mb-1">Execution (Agents)</h3>
+              <p className="text-[11px] text-brand-muted opacity-80 mb-3">
+                Drag to rearrange execution priority.
               </p>
               
               {renderableAgents.length === 0 ? (
-                <div className="text-xs text-gray-400 italic bg-gray-50 p-3 rounded-md text-center border border-gray-100 cursor-not-allowed">
-                  Connect agents to this Crew to see them here.
+                <div className="text-xs text-brand-muted italic bg-brand-bg/50 rounded-lg p-6 text-center border border-dashed border-brand-border">
+                  Connect agents to see them here.
                 </div>
               ) : (
                 <DndContext
@@ -406,17 +405,17 @@ export function NodeConfigDrawer() {
         )}
       </div>
       
-      <div className="p-4 border-t border-gray-200 bg-slate-50 flex gap-3">
+      <div className="p-4 border-t border-brand-border bg-brand-bg/50 flex gap-3">
         <button
-          onClick={() => deleteNode(activeNodeId)}
-          className="flex items-center gap-2 text-red-500 hover:bg-red-50 px-4 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer"
+          onClick={() => deleteNode(activeNode.id)}
+          className="flex items-center gap-2 text-rose-500 dark:text-rose-400 hover:bg-rose-500/10 px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer active:scale-95"
         >
           <Trash2 className="w-4 h-4" />
           Delete
         </button>
         <button
           onClick={() => setActiveNode(null)}
-          className="flex-1 bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+          className="flex-1 bg-slate-900 dark:bg-blue-600 border border-slate-700 dark:border-blue-500 hover:bg-slate-800 dark:hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-md active:scale-95"
         >
           Done
         </button>

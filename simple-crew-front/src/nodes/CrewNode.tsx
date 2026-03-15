@@ -15,21 +15,24 @@ export function CrewNode({ id, data }: NodeProps<Node<CrewNodeData, 'crew'>>) {
   const statusClasses = errors?.length
     ? 'ring-2 ring-red-400 ring-offset-2'
     : status === 'running'
-    ? 'ring-2 ring-blue-500 ring-offset-2 animate-pulse'
-    : status === 'success'
-    ? 'ring-2 ring-green-500 ring-offset-2'
-    : 'hover:ring-2 hover:ring-violet-400';
+      ? 'ring-2 ring-blue-500 ring-offset-2 animate-pulse'
+      : status === 'success'
+        ? 'ring-2 ring-green-500 ring-offset-2'
+        : 'hover:ring-2 hover:ring-violet-400';
 
   return (
-    <div className={`group relative bg-white rounded-xl shadow-md border border-gray-200 w-48 overflow-visible transition-all cursor-pointer ${statusClasses}`}>
-      
+    <div 
+      className={`group relative bg-white dark:bg-slate-900 rounded-xl shadow-sm hover:shadow-md dark:shadow-none border border-slate-200 dark:border-slate-700 w-48 overflow-visible transition-all cursor-pointer ${statusClasses} ${status === 'running' ? 'running' : ''}`}
+      style={{ '--node-color': '#8b5cf6' } as React.CSSProperties}
+    >
+
       {status === 'running' && (
-        <div className="absolute -top-2 -right-2 bg-white rounded-full p-0.5 shadow-md z-20">
+        <div className="absolute -top-2 -right-2 bg-white dark:bg-slate-900 rounded-full p-0.5 shadow-md z-20 border border-slate-100 dark:border-slate-800">
           <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
         </div>
       )}
       {status === 'success' && (
-        <div className="absolute -top-2 -right-2 bg-white rounded-full p-0.5 shadow-md z-20">
+        <div className="absolute -top-2 -right-2 bg-white dark:bg-slate-900 rounded-full p-0.5 shadow-md z-20 border border-slate-100 dark:border-slate-800">
           <CheckCircle2 className="w-5 h-5 text-green-500" />
         </div>
       )}
@@ -54,20 +57,20 @@ export function CrewNode({ id, data }: NodeProps<Node<CrewNodeData, 'crew'>>) {
           <Trash2 className="w-4 h-4" />
         </button>
       </div>
-      
+
       <div className="p-3">
-        <div className="flex justify-between items-center bg-gray-50 border border-gray-100 px-2 py-1.5 rounded-md">
-          <span className="text-xs font-semibold text-gray-500 uppercase">Process:</span>
-          <span className="text-xs text-gray-700 capitalize font-medium">
+        <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 px-2 py-1.5 rounded-md shadow-sm">
+          <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-tight">Process:</span>
+          <span className="text-xs text-slate-800 dark:text-slate-200 capitalize font-bold">
             {data.process}
           </span>
         </div>
-        
+
         {/* Container flexível para os Metadados (Escalável) */}
         {childCount > 0 && (
           <div className="mt-3 flex flex-col gap-1.5">
-            <div className="flex items-center gap-1.5 text-xs text-gray-600 bg-gray-50 w-fit px-2 py-1 rounded-md border border-gray-200/60 shadow-sm">
-              <Users className="w-3.5 h-3.5 text-violet-500" />
+            <div className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/50 w-fit px-2 py-1 rounded-md border border-slate-200 dark:border-slate-700 shadow-sm">
+              <Users className="w-3.5 h-3.5 text-purple-500" />
               <span className="font-medium">
                 {childCount} {childCount === 1 ? 'Agent' : 'Agents'}
               </span>
@@ -79,7 +82,7 @@ export function CrewNode({ id, data }: NodeProps<Node<CrewNodeData, 'crew'>>) {
       {/* Collapse/Expand toggle */}
       <button
         onClick={(e) => { e.stopPropagation(); toggleCollapse(id); }}
-        className="absolute -bottom-3 right-4 bg-white border border-gray-200 rounded-full p-0.5 cursor-pointer hover:bg-gray-50 shadow-sm z-10 transition-colors text-gray-400 hover:text-violet-500"
+        className="absolute -bottom-3 right-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full p-0.5 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 shadow-sm z-10 transition-colors text-slate-400 dark:text-slate-500 hover:text-purple-500 dark:hover:text-purple-400"
         title={data.isCollapsed ? 'Expand children' : 'Collapse children'}
       >
         {data.isCollapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}

@@ -32,3 +32,25 @@ class GraphData(BaseModel):
     version: Optional[str] = "1.0"
     nodes: List[Node]
     edges: List[Edge]
+
+# Schemas para CRUD de Projetos (Sprint 38)
+class ProjectBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    canvas_data: Dict[str, Any]
+
+class ProjectCreate(ProjectBase):
+    pass
+
+class ProjectRead(ProjectBase):
+    id: Any # UUID
+    created_at: Any
+    updated_at: Any
+
+    class Config:
+        from_attributes = True
+
+class ProjectUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    canvas_data: Optional[Dict[str, Any]] = None

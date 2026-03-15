@@ -22,7 +22,7 @@ export interface CrewNodeData extends Record<string, unknown> {
   agentOrder?: string[];
 }
 
-export type AppNode = 
+export type AppNode =
   | Node<AgentNodeData, 'agent'>
   | Node<TaskNodeData, 'task'>
   | Node<CrewNodeData, 'crew'>;
@@ -31,11 +31,17 @@ export type AppEdge = Edge;
 
 export type NodeStatus = 'idle' | 'running' | 'success';
 
-export interface SavedCrew {
+export interface Project {
   id: string;
   name: string;
-  nodes: AppNode[];
-  edges: AppEdge[];
+  description?: string;
+  canvas_data: {
+    nodes: AppNode[];
+    edges: AppEdge[];
+    version: string;
+  };
+  created_at: string;
+  updated_at: string;
 }
 
 export interface AppNotification {
@@ -47,9 +53,11 @@ export interface AppNotification {
 export interface AppState {
   nodes: AppNode[];
   edges: AppEdge[];
-  savedCrews: SavedCrew[];
   activeNodeId: string | null;
   isExecuting: boolean;
+  isSaving: boolean;
+  savedProjects: Project[];
+  currentProjectId: string | null;
   nodeStatuses: Record<string, NodeStatus>;
   onNodesChange: (changes: any) => void;
   onEdgesChange: (changes: any) => void;
@@ -58,8 +66,10 @@ export interface AppState {
   deleteNode: (nodeId: string) => void;
   updateNodeData: (nodeId: string, data: Partial<any>) => void;
   addNode: (node: AppNode) => void;
-  saveCurrentCrew: (name: string) => void;
-  loadCrew: (id: string) => void;
+  fetchProjects: () => Promise<void>;
+  saveProject: (name: string, description?: string) => Promise<void>;
+  loadProject: (projectId: string) => Promise<void>;
+  deleteProject: (projectId: string) => Promise<void>;
   setActiveNode: (id: string | null) => void;
   toggleCollapse: (nodeId: string) => void;
   setNodeStatus: (id: string, status: NodeStatus) => void;
@@ -79,4 +89,8 @@ export interface AppState {
   isConsoleExpanded: boolean;
   setIsConsoleOpen: (isOpen: boolean) => void;
   setIsConsoleExpanded: (isExpanded: boolean) => void;
+  theme: 'light' | 'dark';
+  toggleTheme: () => void;
+  isSettingsOpen: boolean;
+  setIsSettingsOpen: (open: boolean) => void;
 }

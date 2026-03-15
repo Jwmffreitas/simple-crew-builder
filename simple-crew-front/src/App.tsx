@@ -1,7 +1,8 @@
-import React, { useCallback, useRef } from 'react';
-import { ReactFlow, Background, Controls, MiniMap, ReactFlowProvider, useReactFlow } from '@xyflow/react';
+import React, { useCallback, useRef, useEffect } from 'react';
+import { Toaster } from 'react-hot-toast';
+import { ReactFlow, Background, Controls, MiniMap, ReactFlowProvider, useReactFlow, BackgroundVariant } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Play, Sparkles } from 'lucide-react';
+import { Play, Sparkles, Save, Loader2 } from 'lucide-react';
 
 import { useStore } from './store';
 import { AgentNode } from './nodes/AgentNode';
@@ -14,6 +15,7 @@ import { DeletableEdge } from './nodes/DeletableEdge';
 import { ExportDropdown } from './ExportDropdown';
 import { Toast } from './Toast';
 import { ConsoleDrawer } from './ConsoleDrawer';
+import { SettingsDrawer } from './SettingsDrawer';
 
 const nodeTypes = {
   agent: AgentNode,
@@ -30,7 +32,7 @@ const getId = () => `dndnode_${crypto.randomUUID()}`;
 function FlowBuilder() {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition } = useReactFlow();
-  
+
   const nodes = useStore((state) => state.nodes);
   const edges = useStore((state) => state.edges);
   const setActiveNode = useStore((state) => state.setActiveNode);
@@ -38,13 +40,30 @@ function FlowBuilder() {
   const onEdgesChange = useStore((state) => state.onEdgesChange);
   const onConnect = useStore((state) => state.onConnect);
   const addNode = useStore((state) => state.addNode);
-  
+
   const isExecuting = useStore((state) => state.isExecuting);
   const startRealExecution = useStore((state) => state.startRealExecution);
   const executionResult = useStore((state) => state.executionResult);
   const setIsConsoleExpanded = useStore((state) => state.setIsConsoleExpanded);
   const setIsConsoleOpen = useStore((state) => state.setIsConsoleOpen);
   const nodeStatuses = useStore((state) => state.nodeStatuses);
+  const fetchProjects = useStore((state) => state.fetchProjects);
+  const saveProject = useStore((state) => state.saveProject);
+  const currentProjectId = useStore((state) => state.currentProjectId);
+  const isSaving = useStore((state) => state.isSaving);
+  const theme = useStore((state) => state.theme);
+
+  useEffect(() => {
+    fetchProjects();
+  }, [fetchProjects]);
+
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [theme]);
 
   const validateGraph = useStore((state) => state.validateGraph);
   const showNotification = useStore((state) => state.showNotification);
@@ -110,11 +129,11 @@ function FlowBuilder() {
     },
     [setActiveNode]
   );
-  
+
   const edgesWithAnimation = edges.map(e => {
     const sourceStatus = nodeStatuses[e.source];
     const targetStatus = nodeStatuses[e.target];
-    
+
     const isRunning = sourceStatus === 'running' || targetStatus === 'running';
     const isSuccess = sourceStatus === 'success' && targetStatus === 'success';
 
@@ -135,43 +154,59 @@ function FlowBuilder() {
   });
 
   return (
-    <div className="w-screen h-screen bg-slate-50 flex flex-col font-sans overflow-hidden">
-      <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between shadow-sm z-10 relative">
+    <div className="w-screen h-screen bg-brand-bg flex flex-col font-sans overflow-hidden transition-colors duration-300">
+      <header className="h-16 bg-brand-card border-b border-brand-border flex items-center justify-between px-6 z-10 shadow-sm transition-colors duration-300">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center shadow-inner">
             <span className="text-white font-bold text-lg">S</span>
           </div>
-          <h1 className="text-xl font-bold text-gray-800 tracking-tight">SimpleCrew <span className="text-gray-400 font-normal">Builder</span></h1>
+          <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">SimpleCrew <span className="text-slate-400 dark:text-slate-500 font-normal">Builder</span></h1>
         </div>
         <div className="flex items-center gap-3">
           {executionResult && (
-            <button 
+            <button
               onClick={() => {
                 setIsConsoleOpen(true);
                 setIsConsoleExpanded(true);
               }}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-amber-600 bg-amber-50 hover:bg-amber-100 transition-colors shadow-sm border border-amber-200"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors shadow-sm border border-amber-200 dark:border-amber-800"
             >
               <Sparkles className="w-4 h-4" />
               View Last Result
             </button>
           )}
-          <button 
+          <button
             onClick={handleRunCrew}
             disabled={isExecuting}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-sm ${
-              isExecuting 
-                ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-sm ${isExecuting
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                 : 'bg-emerald-500 hover:bg-emerald-600 text-white hover:shadow'
-            }`}
+              }`}
           >
             <Play className="w-4 h-4 fill-current" />
             {isExecuting ? 'Running...' : 'Run Crew'}
           </button>
+
+          <button
+            onClick={() => {
+              const crewNode = nodes.find(n => n.type === 'crew');
+              const name = (crewNode?.data as any)?.name || "Nova Crew";
+              saveProject(name);
+            }}
+            disabled={isSaving}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-sm ${isSaving
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                : 'bg-indigo-500 hover:bg-indigo-600 text-white hover:shadow'
+              }`}
+          >
+            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            {isSaving ? 'Saving...' : currentProjectId ? 'Update Project' : 'Quick Save'}
+          </button>
+
           <ExportDropdown />
         </div>
       </header>
-      
+
       <div className="flex-1 w-full h-full flex flex-row relative">
         <Sidebar />
         <div className="flex-1 h-full" ref={reactFlowWrapper}>
@@ -189,18 +224,24 @@ function FlowBuilder() {
             fitView
             minZoom={0.2}
             maxZoom={4}
-            defaultEdgeOptions={{ 
+            defaultEdgeOptions={{
               type: 'deletable',
-              style: { strokeWidth: 2, stroke: '#94a3b8' },
+              style: { strokeWidth: 2, stroke: theme === 'dark' ? '#334155' : '#94a3b8' },
               animated: true
             }}
           >
-            <Background gap={16} size={1} color="#cbd5e1" />
-            <Controls className="bg-white border-gray-200 shadow-sm rounded-lg mb-4 ml-4" />
-            <MiniMap 
-              className="bg-white border-gray-200 shadow-sm rounded-lg overflow-hidden mb-4 mr-4"
-              zoomable 
-              pannable 
+            <Background 
+              gap={16} 
+              size={1} 
+              color={theme === 'dark' ? '#334155' : '#cbd5e1'} 
+              style={{ backgroundColor: 'var(--bg-main)' }}
+              variant={BackgroundVariant.Dots}
+            />
+            <Controls className="!bg-white dark:!bg-slate-800 !border-slate-200 dark:!border-slate-700 !shadow-md !rounded-lg mb-4 ml-4" />
+            <MiniMap
+              className="!bg-white dark:!bg-slate-800 !border-slate-200 dark:!border-slate-700 !shadow-md !rounded-lg overflow-hidden mb-4 mr-4"
+              zoomable
+              pannable
               nodeColor={(node) => {
                 switch (node.type) {
                   case 'agent': return '#3b82f6';
@@ -208,13 +249,15 @@ function FlowBuilder() {
                   case 'crew': return '#8b5cf6';
                   default: return '#e2e8f0';
                 }
-              }} 
+              }}
             />
           </ReactFlow>
         </div>
         <NodeConfigDrawer />
         <ConsoleDrawer />
+        <SettingsDrawer />
         <Toast />
+        <Toaster position="bottom-right" />
       </div>
     </div>
   );

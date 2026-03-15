@@ -11,21 +11,24 @@ export function TaskNode({ id, data }: NodeProps<Node<TaskNodeData, 'task'>>) {
   const statusClasses = errors?.length
     ? 'ring-2 ring-red-400 ring-offset-2'
     : status === 'running'
-    ? 'ring-2 ring-blue-500 ring-offset-2 animate-pulse'
-    : status === 'success'
-    ? 'ring-2 ring-green-500 ring-offset-2'
-    : 'hover:ring-2 hover:ring-emerald-400';
+      ? 'ring-2 ring-blue-500 ring-offset-2 animate-pulse'
+      : status === 'success'
+        ? 'ring-2 ring-green-500 ring-offset-2'
+        : 'hover:ring-2 hover:ring-emerald-400';
 
   return (
-    <div className={`group relative bg-white rounded-xl shadow-md border border-gray-200 w-56 overflow-visible transition-all cursor-pointer ${statusClasses}`}>
-      
+    <div 
+      className={`group relative bg-white dark:bg-slate-900 rounded-xl shadow-sm hover:shadow-md dark:shadow-none border border-slate-200 dark:border-slate-700 w-56 overflow-visible transition-all cursor-pointer ${statusClasses} ${status === 'running' ? 'running' : ''}`}
+      style={{ '--node-color': '#10b981' } as React.CSSProperties}
+    >
+
       {status === 'running' && (
-        <div className="absolute -top-2 -right-2 bg-white rounded-full p-0.5 shadow-md z-20">
+        <div className="absolute -top-2 -right-2 bg-white dark:bg-slate-900 rounded-full p-0.5 shadow-md z-20 border border-slate-100 dark:border-slate-800">
           <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
         </div>
       )}
       {status === 'success' && (
-        <div className="absolute -top-2 -right-2 bg-white rounded-full p-0.5 shadow-md z-20">
+        <div className="absolute -top-2 -right-2 bg-white dark:bg-slate-900 rounded-full p-0.5 shadow-md z-20 border border-slate-100 dark:border-slate-800">
           <CheckCircle2 className="w-5 h-5 text-green-500" />
         </div>
       )}
@@ -50,9 +53,9 @@ export function TaskNode({ id, data }: NodeProps<Node<TaskNodeData, 'task'>>) {
           <Trash2 className="w-4 h-4" />
         </button>
       </div>
-      
+
       <div className="p-3">
-        <p className="text-xs text-gray-500 line-clamp-2" title={data.description}>
+        <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2" title={data.description}>
           {data.description || 'No description defined'}
         </p>
       </div>

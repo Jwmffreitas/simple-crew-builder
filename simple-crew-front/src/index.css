@@ -1,8 +1,90 @@
 @import "tailwindcss";
 
-html, body, #root {
+@theme {
+  --color-brand-bg: var(--bg-main);
+  --color-brand-card: var(--bg-card);
+  --color-brand-text: var(--text-main);
+  --color-brand-muted: var(--text-muted);
+  --color-brand-border: var(--border-main);
+  --color-brand-accent: var(--accent-primary);
+}
+
+:root {
+  --bg-main: #f8fafc; /* Slate-50 */
+  --bg-card: #ffffff;
+  --text-main: #0f172a; /* Slate-900 */
+  --text-muted: #64748b; /* Slate-500 */
+  --border-main: #e2e8f0; /* Slate-200 */
+  --accent-primary: #3b82f6; /* Blue-600 */
+  --canvas-dots: #cbd5e1; /* Slate-300 */
+}
+
+.dark {
+  --bg-main: #020617; /* Slate-950 (Canvas Background) */
+  --bg-card: #0f172a; /* Slate-900 (Sidebar, Header, Cards) */
+  --text-main: #f1f5f9; /* Slate-100 */
+  --text-muted: #94a3b8; /* Slate-400 */
+  --border-main: #1e293b; /* Slate-800 */
+  --accent-primary: #60a5fa; /* Blue-400 */
+  --canvas-dots: #1e293b; /* Slate-800 */
+}
+
+html,
+body,
+#root {
   width: 100%;
   height: 100%;
   margin: 0;
   padding: 0;
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
+.react-flow__controls-button {
+  @apply !bg-brand-card !border-brand-border !text-brand-muted hover:!bg-brand-bg transition-all duration-300;
+}
+
+/* Node Styling & Contrast Enhancement */
+.react-flow__node {
+  transition: transform 0.2s ease, box-shadow 0.3s ease;
+}
+
+.react-flow__node > div {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-main);
+  border-radius: 12px;
+  transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+:root .react-flow__node > div {
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+}
+
+.dark .react-flow__node > div {
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.3), 0 4px 6px -4px rgb(0 0 0 / 0.3);
+}
+
+/* Running State Glow */
+.react-flow__node.running > div {
+  box-shadow: 0 0 20px -2px var(--node-color, #3b82f6);
+}
+
+.react-flow__edge-path {
+  stroke-width: 2.5;
+}
+
+.react-flow__edge.running .react-flow__edge-path {
+  stroke: var(--accent-primary);
+  stroke-dasharray: 5;
+  animation: dash 1s linear infinite;
+}
+
+@keyframes dash {
+  from {
+    stroke-dashoffset: 10;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
 }

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import toast from 'react-hot-toast';
 import {
   type Connection,
   type EdgeChange,
@@ -21,10 +22,10 @@ const initialNodes: AppNode[] = [
     id: 'agent-1',
     type: 'agent',
     position: { x: 50, y: 200 },
-    data: { 
+    data: {
       name: 'Senior Writer',
-      role: 'Senior Writer', 
-      goal: 'Write compelling copy', 
+      role: 'Senior Writer',
+      goal: 'Write compelling copy',
       backstory: 'Expert in persuasive writing.',
       isCollapsed: false,
     },
@@ -33,10 +34,10 @@ const initialNodes: AppNode[] = [
     id: 'task-1',
     type: 'task',
     position: { x: 450, y: 200 },
-    data: { 
+    data: {
       name: 'SEO Writing Task',
-      description: 'Escrever descrições persuasivas para os produtos da Glaad Store', 
-      expected_output: '3 parágrafos de texto otimizado para SEO' 
+      description: 'Escrever descrições persuasivas para os produtos da Glaad Store',
+      expected_output: '3 parágrafos de texto otimizado para SEO'
     },
   }
 ];
@@ -89,11 +90,11 @@ function getDescendantsToShow(nodeId: string, nodes: AppNode[], edges: AppEdge[]
     for (const childId of childrenIds) {
       if (!visited.has(childId)) {
         descendants.push(childId);
-        
+
         // Verifica o estado isCollapsed deste filho
         const childNode = nodes.find(n => n.id === childId);
         const isChildCollapsed = (childNode?.data as any)?.isCollapsed ?? false;
-        
+
         // Só continua a recursão se o filho NÃO estiver colapsado
         if (!isChildCollapsed) {
           queue.push(childId);
@@ -107,13 +108,27 @@ function getDescendantsToShow(nodeId: string, nodes: AppNode[], edges: AppEdge[]
 export const useStore = create<AppState>((set, get) => ({
   nodes: initialNodes,
   edges: initialEdges,
+  activeNodeId: null,
   isExecuting: false,
+  isSaving: false,
+  savedProjects: [],
+  currentProjectId: null,
   nodeStatuses: {},
   nodeErrors: {},
   notification: null,
   executionResult: null,
   isConsoleOpen: false,
   isConsoleExpanded: false,
+  theme: (localStorage.getItem('theme') as 'light' | 'dark') || 'light',
+  isSettingsOpen: false,
+  setIsSettingsOpen: (open) => set({ isSettingsOpen: open }),
+  toggleTheme: () => {
+    set((state) => {
+      const newTheme = state.theme === 'light' ? 'dark' : 'light';
+      localStorage.setItem('theme', newTheme);
+      return { theme: newTheme };
+    });
+  },
   setExecutionResult: (result) => set({ executionResult: result }),
   showNotification: (message, type) => {
     set({ notification: { message, type, visible: true } });
@@ -149,7 +164,7 @@ export const useStore = create<AppState>((set, get) => ({
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    
+
     state.showNotification("Project exported successfully!", "success");
   },
   loadProjectJson: (data) => {
@@ -231,14 +246,14 @@ export const useStore = create<AppState>((set, get) => ({
 
           if (status === 'running') {
             newStatuses[parentAgentId] = 'running';
-          } 
+          }
           else if (status === 'success') {
             // Verifica se TODAS as tasks desse agente já concluíram antes de desligá-lo
             const allSiblingTasks = state.edges
               .filter(e => e.source === parentAgentId)
               .map(e => e.target);
-            
-            const allSuccess = allSiblingTasks.every(taskId => 
+
+            const allSuccess = allSiblingTasks.every(taskId =>
               taskId === id ? true : newStatuses[taskId] === 'success'
             );
 
@@ -257,12 +272,12 @@ export const useStore = create<AppState>((set, get) => ({
 
   startRealExecution: async () => {
     // Abre a gaveta de cara pra mostrar que começou
-    set({ 
-      isExecuting: true, 
-      nodeStatuses: {}, 
-      executionResult: null, 
+    set({
+      isExecuting: true,
+      nodeStatuses: {},
+      executionResult: null,
       isConsoleOpen: true,
-      isConsoleExpanded: false 
+      isConsoleExpanded: false
     });
 
     const state = get();
@@ -289,7 +304,7 @@ export const useStore = create<AppState>((set, get) => ({
         try {
           const errorData = await response.json();
           errorMsg = errorData.detail || errorMsg;
-        } catch(e) {}
+        } catch (e) { }
         throw new Error(errorMsg);
       }
 
@@ -301,67 +316,67 @@ export const useStore = create<AppState>((set, get) => ({
 
       while (true) {
         const { value, done } = await reader.read();
-        
+
         // Sentry de Fim de Stream Abrupto/Resiliente
         if (done) {
-            if (get().isExecuting) {
-               const newStatuses: Record<string, NodeStatus> = {};
-               state.nodes.forEach(n => newStatuses[n.id] = 'success');
-               set({ nodeStatuses: newStatuses, isExecuting: false });
-            }
-            break;
+          if (get().isExecuting) {
+            const newStatuses: Record<string, NodeStatus> = {};
+            state.nodes.forEach(n => newStatuses[n.id] = 'success');
+            set({ nodeStatuses: newStatuses, isExecuting: false });
+          }
+          break;
         }
-        
+
         const chunkText = decoder.decode(value, { stream: true });
         const lines = chunkText.split("\n").filter(line => line.trim().length > 0);
 
         for (const line of lines) {
           try {
             const event = JSON.parse(line);
-            
+
             if (event.type === 'heartbeat') {
-               continue; // Só ignora e mantem a conexão viva
-               
+              continue; // Só ignora e mantem a conexão viva
+
             } else if (event.type === 'status') {
-               // Uma Task ou Agent acendeu via Callback do Python!
-               get().setNodeStatus(event.nodeId, event.status);
-               
+              // Uma Task ou Agent acendeu via Callback do Python!
+              get().setNodeStatus(event.nodeId, event.status);
+
             } else if (event.type === 'task_completed') {
-               get().setNodeStatus(event.task_id, 'success');
-               
+              get().setNodeStatus(event.task_id, 'success');
+
             } else if (event.type === 'log') {
-               // Limpeza de Códigos ANSI
-               const stripAnsi = (str: string) => str.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '');
-               const cleanLog = stripAnsi(event.data);
-               
-               const currentLog = get().executionResult || "";
-               set({ executionResult: currentLog + cleanLog });
-               
+              // Limpeza de Códigos ANSI
+              const stripAnsi = (str: string) => str.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '');
+              const cleanLog = stripAnsi(event.data);
+
+              const currentLog = get().executionResult || "";
+              set({ executionResult: currentLog + cleanLog });
+
             } else if (event.type === 'final_result') {
-               // Final do funil e acende a Coroa Mestra (Opcional, varrendo tudo pra green)
-               const newStatuses: Record<string, NodeStatus> = {};
-               state.nodes.forEach(n => newStatuses[n.id] = 'success');
-               set({ 
-                 nodeStatuses: newStatuses, 
-                 isExecuting: false,
-                 isConsoleExpanded: true,
-                 executionResult: event.result // Sobrescreve a tela de logs pelo belo Relatório Final
-               });
-               get().showNotification("A IA completou todo o pipeline de Agentes!", "success");
-               
+              // Final do funil e acende a Coroa Mestra (Opcional, varrendo tudo pra green)
+              const newStatuses: Record<string, NodeStatus> = {};
+              state.nodes.forEach(n => newStatuses[n.id] = 'success');
+              set({
+                nodeStatuses: newStatuses,
+                isExecuting: false,
+                isConsoleExpanded: true,
+                executionResult: event.result // Sobrescreve a tela de logs pelo belo Relatório Final
+              });
+              get().showNotification("A IA completou todo o pipeline de Agentes!", "success");
+
             } else if (event.type === 'done') {
-               // Evento sentinela incondicional disparado pelo finally{} da thread
-               if (get().isExecuting) {
-                  const newStatuses: Record<string, NodeStatus> = {};
-                  state.nodes.forEach(n => newStatuses[n.id] = 'success');
-                  set({ nodeStatuses: newStatuses, isExecuting: false });
-               }
+              // Evento sentinela incondicional disparado pelo finally{} da thread
+              if (get().isExecuting) {
+                const newStatuses: Record<string, NodeStatus> = {};
+                state.nodes.forEach(n => newStatuses[n.id] = 'success');
+                set({ nodeStatuses: newStatuses, isExecuting: false });
+              }
 
             } else if (event.type === 'error') {
-               throw new Error(event.error);
+              throw new Error(event.error);
             }
           } catch (e) {
-             // Pode ignorar falhas de JSON Parse se um stdout derramar mal formatado
+            // Pode ignorar falhas de JSON Parse se um stdout derramar mal formatado
           }
         }
       }
@@ -404,7 +419,7 @@ export const useStore = create<AppState>((set, get) => ({
         // Uma Task só pode ter 1 Agent "pai"
         newEdges = newEdges.filter((edge) => edge.target !== connection.target);
       }
-      
+
       if (targetNode.type === 'agent') {
         // Um Agent só pode ter 1 Crew "pai" (Evita múltiplos crews usando o mesmo agent graph instance)
         newEdges = newEdges.filter((edge) => edge.target !== connection.target);
@@ -440,40 +455,110 @@ export const useStore = create<AppState>((set, get) => ({
       }),
     });
   },
-  savedCrews: [],
-  activeNodeId: null,
   setActiveNode: (id: string | null) => {
     set({ activeNodeId: id });
+  },
+  loadProject: async (projectId: string) => {
+    try {
+      const response = await fetch(`http://localhost:8000/api/v1/projects/${projectId}`);
+      if (!response.ok) throw new Error('Falha ao carregar projeto');
+      const project = await response.json();
+
+      set({
+        nodes: project.canvas_data.nodes,
+        edges: project.canvas_data.edges,
+        currentProjectId: project.id,
+        nodeStatuses: {},
+        nodeErrors: {}
+      });
+      toast.success(`Projeto "${project.name}" carregado!`);
+    } catch (error: any) {
+      toast.error(error.message);
+    }
+  },
+
+  fetchProjects: async () => {
+    try {
+      const response = await fetch('http://localhost:8000/api/v1/projects');
+      if (!response.ok) throw new Error('Falha ao buscar projetos');
+      const projects = await response.json();
+      set({ savedProjects: projects });
+    } catch (error: any) {
+      console.error(error);
+    }
+  },
+
+  saveProject: async (nameByArg: string, description?: string) => {
+    const state = get();
+    if (!state.validateGraph()) {
+      toast.error("Corrija os erros antes de salvar.");
+      return;
+    }
+
+    set({ isSaving: true });
+    try {
+      const payload = {
+        name: nameByArg,
+        description: description || "",
+        canvas_data: {
+          nodes: state.nodes,
+          edges: state.edges,
+          version: "1.0"
+        }
+      };
+
+      let response;
+      if (state.currentProjectId) {
+        // PATCH
+        response = await fetch(`http://localhost:8000/api/v1/projects/${state.currentProjectId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+      } else {
+        // POST
+        response = await fetch('http://localhost:8000/api/v1/projects', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+      }
+
+      if (!response.ok) throw new Error('Falha ao salvar projeto');
+      const saved = await response.json();
+
+      set({ currentProjectId: saved.id });
+      await state.fetchProjects();
+      toast.success(state.currentProjectId ? "Projeto atualizado!" : "Projeto criado com sucesso!");
+    } catch (error: any) {
+      toast.error(error.message);
+    } finally {
+      set({ isSaving: false });
+    }
+  },
+
+  deleteProject: async (projectId: string) => {
+    try {
+      const response = await fetch(`http://localhost:8000/api/v1/projects/${projectId}`, {
+        method: 'DELETE'
+      });
+      if (!response.ok) throw new Error('Falha ao deletar projeto');
+
+      if (get().currentProjectId === projectId) {
+        set({ currentProjectId: null });
+      }
+
+      await get().fetchProjects();
+      toast.success("Projeto removido.");
+    } catch (error: any) {
+      toast.error(error.message);
+    }
   },
   addNode: (node: AppNode) => {
     set({
       nodes: [...get().nodes, node],
+      currentProjectId: null // Resetar ID ao começar um novo rascunho
     });
-  },
-  saveCurrentCrew: (name: string) => {
-    const state = get();
-    if (!name.trim()) return;
-    
-    const newCrew = {
-      id: crypto.randomUUID(),
-      name,
-      nodes: state.nodes,
-      edges: state.edges,
-    };
-
-    set({
-      savedCrews: [...state.savedCrews, newCrew],
-    });
-  },
-  loadCrew: (id: string) => {
-    const state = get();
-    const crew = state.savedCrews.find(c => c.id === id);
-    if (crew) {
-      set({
-        nodes: crew.nodes,
-        edges: crew.edges,
-      });
-    }
   },
   toggleCollapse: (nodeId: string) => {
     set((state) => {
@@ -484,7 +569,7 @@ export const useStore = create<AppState>((set, get) => ({
       const willCollapse = !currentlyCollapsed; // Se era false, agora vai colapsar (true)
 
       let descendantIds: string[] = [];
-      
+
       if (willCollapse) {
         // Vai colapsar (Esconder). Pega todos os filhos de todos os níveis.
         descendantIds = getDescendantsToHide(nodeId, state.edges);
@@ -508,9 +593,9 @@ export const useStore = create<AppState>((set, get) => ({
       const updatedEdges = state.edges.map((edge) => {
         // Se a aresta tem como source O ALVO ou como source algum descendente afetado
         const isAffectedEdge = edge.source === nodeId || descendantSet.has(edge.source) || descendantSet.has(edge.target);
-        
+
         if (isAffectedEdge) {
-           return { ...edge, hidden: willCollapse };
+          return { ...edge, hidden: willCollapse };
         }
         return edge;
       });
