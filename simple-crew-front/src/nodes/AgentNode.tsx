@@ -1,11 +1,13 @@
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
-import { User, Trash2, ChevronDown, ChevronUp, CheckSquare, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { User, Trash2, ChevronDown, ChevronUp, CheckSquare, Loader2, CheckCircle2, AlertCircle, Cpu } from 'lucide-react';
 import { useStore } from '../store';
 import type { AgentNodeData } from '../types';
 
 export function AgentNode({ id, data }: NodeProps<Node<AgentNodeData, 'agent'>>) {
   const deleteNode = useStore((state) => state.deleteNode);
   const toggleCollapse = useStore((state) => state.toggleCollapse);
+  const updateNodeData = useStore((state) => state.updateNodeData);
+  const models = useStore((state) => state.models);
   const edges = useStore((state) => state.edges);
   const status = useStore((state) => state.nodeStatuses[id] || 'idle');
   const errors = useStore((state) => state.nodeErrors[id]);
@@ -63,9 +65,30 @@ export function AgentNode({ id, data }: NodeProps<Node<AgentNodeData, 'agent'>>)
           {data.goal || 'No goal defined'}
         </p>
 
+        {/* Model Selection */}
+        <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
+          <div className="flex items-center gap-2 mb-1">
+            <Cpu className="w-3.5 h-3.5 text-indigo-500" />
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">AI Model</span>
+          </div>
+          <select 
+            value={data.modelId || ''}
+            onChange={(e) => updateNodeData(id, { modelId: e.target.value || undefined })}
+            onClick={(e) => e.stopPropagation()}
+            className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5 text-[11px] font-medium text-slate-700 dark:text-slate-300 outline-none focus:ring-1 focus:ring-indigo-500 transition-all cursor-pointer appearance-none"
+          >
+            <option value="">Default ({models.find(m => m.isDefault)?.name || 'Not set'})</option>
+            {models.map(model => (
+              <option key={model.id} value={model.id}>
+                {model.name} {model.isDefault ? '(Default)' : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+
         {/* Container flexível para os Metadados (Escalável) */}
         {childCount > 0 && (
-          <div className="mt-3 flex flex-col gap-1.5 pt-3 border-t border-slate-100 dark:border-slate-800">
+          <div className="mt-2 flex flex-col gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-800">
             <div className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/50 w-fit px-2 py-1 rounded-md border border-slate-200 dark:border-slate-700 shadow-sm">
               <CheckSquare className="w-3.5 h-3.5 text-blue-500" />
               <span className="font-medium">

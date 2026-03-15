@@ -8,13 +8,18 @@ import { useStore } from './store';
 function App() {
   const theme = useStore((state) => state.theme);
 
+  const fetchModels = useStore((state) => state.fetchModels);
+  const fetchCredentials = useStore((state) => state.fetchCredentials);
+
   useEffect(() => {
+    fetchModels();
+    fetchCredentials();
     if (theme === 'dark') {
       document.documentElement.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
     }
-  }, [theme]);
+  }, [theme, fetchModels, fetchCredentials]);
 
   return (
     <BrowserRouter>

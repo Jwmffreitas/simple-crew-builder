@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Trash2, GripVertical } from 'lucide-react';
+import { X, Trash2, GripVertical, Cpu } from 'lucide-react';
 import { useStore } from '../store';
 import type { AppState, ProcessType, AppNode } from '../types';
 import {
@@ -67,6 +67,7 @@ export function NodeConfigDrawer() {
   const deleteNode = useStore((state: AppState) => state.deleteNode);
   const updateCrewAgentOrder = useStore((state: AppState) => state.updateCrewAgentOrder);
   const updateAgentTaskOrder = useStore((state: AppState) => state.updateAgentTaskOrder);
+  const models = useStore((state: AppState) => state.models);
 
   const [localName, setLocalName] = useState('');
   const [nameError, setNameError] = useState(false);
@@ -288,6 +289,28 @@ export function NodeConfigDrawer() {
                 onChange={(e) => updateNodeData(activeNode.id, { backstory: e.target.value })}
                 placeholder="The agent's background and expertise..."
               />
+            </div>
+
+            <div className="flex flex-col gap-2 pt-4 border-t border-brand-border/50">
+              <div className="flex items-center gap-2 mb-1">
+                <Cpu className="w-4 h-4 text-indigo-500" />
+                <label className="text-xs font-bold text-brand-muted uppercase tracking-wider">AI Model Configuration</label>
+              </div>
+              <select 
+                value={(data as any).modelId || ''}
+                onChange={(e) => updateNodeData(activeNode.id, { modelId: e.target.value || undefined })}
+                className="w-full bg-brand-bg border border-brand-border rounded-lg px-3 py-2 text-sm text-brand-text outline-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer appearance-none"
+              >
+                <option value="">Default ({models.find(m => m.isDefault)?.name || 'Not set'})</option>
+                {models.map(model => (
+                  <option key={model.id} value={model.id}>
+                    {model.name} {model.isDefault ? '(Default)' : ''}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[11px] text-brand-muted opacity-80">
+                Choose a specific model configuration for this agent.
+              </p>
             </div>
 
             {/* -- Tasks Execution Order Ranking -- */}

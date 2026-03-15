@@ -8,6 +8,7 @@ export interface AgentNodeData extends Record<string, unknown> {
   goal: string;
   backstory: string;
   isCollapsed?: boolean;
+  modelId?: string;
 }
 
 export interface TaskNodeData extends Record<string, unknown> {
