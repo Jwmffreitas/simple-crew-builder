@@ -185,10 +185,10 @@ export const useStore = create<AppState>((set, get) => ({
         nodeErrors: {}
       });
 
-      get().showNotification("Projeto carregado com sucesso!", "success");
+      get().showNotification("Project uploaded successfully!", "success");
       return true;
     } catch (err) {
-      get().showNotification("Falha ao importar: Arquivo inválido.", "error");
+      get().showNotification("Failed to import: Invalid file.", "error");
       return false;
     }
   },
@@ -474,7 +474,7 @@ export const useStore = create<AppState>((set, get) => ({
         nodeStatuses: {},
         nodeErrors: {}
       });
-      toast.success(`Projeto "${project.name}" carregado!`);
+      toast.success(`Project "${project.name}" loaded!`);
     } catch (error: any) {
       toast.error(error.message);
     }
@@ -483,7 +483,7 @@ export const useStore = create<AppState>((set, get) => ({
   fetchProjects: async () => {
     try {
       const response = await fetch('http://localhost:8000/api/v1/projects');
-      if (!response.ok) throw new Error('Falha ao buscar projetos');
+      if (!response.ok) throw new Error('Failed to fetch projects');
       const projects = await response.json();
       set({ savedProjects: projects });
     } catch (error: any) {
@@ -494,7 +494,7 @@ export const useStore = create<AppState>((set, get) => ({
   saveProject: async (nameByArg: string, description?: string) => {
     const state = get();
     if (!state.validateGraph()) {
-      toast.error("Corrija os erros antes de salvar.");
+      toast.error("Please fix the errors before saving.");
       return;
     }
 
@@ -527,12 +527,12 @@ export const useStore = create<AppState>((set, get) => ({
         });
       }
 
-      if (!response.ok) throw new Error('Falha ao salvar projeto');
+      if (!response.ok) throw new Error('Failed to save project');
       const saved = await response.json();
 
       set({ currentProjectId: saved.id });
       await state.fetchProjects();
-      toast.success(state.currentProjectId ? "Projeto atualizado!" : "Projeto criado com sucesso!");
+      toast.success(state.currentProjectId ? "Project updated!" : "Project created successfully!");
     } catch (error: any) {
       toast.error(error.message);
     } finally {
@@ -545,7 +545,7 @@ export const useStore = create<AppState>((set, get) => ({
       const response = await fetch(`http://localhost:8000/api/v1/projects/${projectId}`, {
         method: 'DELETE'
       });
-      if (!response.ok) throw new Error('Falha ao deletar projeto');
+      if (!response.ok) throw new Error('Failed to delete project');
 
       if (get().currentProjectId === projectId) {
         set({ currentProjectId: null });
@@ -741,7 +741,7 @@ export const useStore = create<AppState>((set, get) => ({
       const response = await fetch('http://localhost:8000/api/v1/models');
       if (!response.ok) throw new Error('Failed to fetch models');
       const data = await response.json();
-      
+
       const mappedModels = data.map((m: any) => ({
         id: m.id,
         name: m.name,
@@ -754,7 +754,7 @@ export const useStore = create<AppState>((set, get) => ({
         maxCompletionTokens: m.max_completion_tokens,
         isDefault: m.is_default
       }));
-      
+
       set({ models: mappedModels });
     } catch (error: any) {
       console.error("Fetch models error:", error);
