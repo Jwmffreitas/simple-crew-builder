@@ -24,17 +24,17 @@ export function ConsoleDrawer() {
 
   return (
     <div
-      className={`fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 shadow-2xl transition-all duration-300 ease-in-out z-50 flex flex-col font-mono text-sm ${isConsoleExpanded ? 'h-96' : 'h-14 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50'
+      className={`fixed bottom-0 left-0 right-0 bg-slate-950 border-t border-slate-800 shadow-2xl transition-all duration-300 ease-in-out z-50 flex flex-col font-mono text-sm ${isConsoleExpanded ? 'h-96' : 'h-14 cursor-pointer hover:bg-slate-900'
         }`}
       onClick={() => {
         if (!isConsoleExpanded) setIsConsoleExpanded(true);
       }}
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 h-14 shrink-0 border-b border-slate-100 dark:border-slate-800/50 bg-slate-50 dark:bg-slate-800/30">
+      <div className="flex items-center justify-between px-4 h-14 shrink-0 border-b border-slate-800/50 bg-slate-900/80">
         <div className="flex items-center gap-3">
-          <Terminal className="w-5 h-5 text-slate-500 dark:text-emerald-400" />
-          <h3 className="font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-2">
+          <Terminal className="w-5 h-5 text-emerald-400" />
+          <h3 className="font-semibold text-slate-200 flex items-center gap-2">
             Live Console
             {isExecuting ? (
               <Loader2 className="w-4 h-4 text-emerald-500 animate-spin" />
@@ -43,7 +43,7 @@ export function ConsoleDrawer() {
             ) : null}
           </h3>
           {!isConsoleExpanded && isExecuting && (
-            <span className="text-emerald-500/80 text-xs ml-2 animate-pulse flex items-center gap-1">
+            <span className="text-emerald-400/80 text-xs ml-2 animate-pulse flex items-center gap-1">
               <Sparkles className="w-3 h-3" /> Thinking...
             </span>
           )}
@@ -82,7 +82,7 @@ export function ConsoleDrawer() {
             {executionResult}
           </pre>
         ) : (
-          <div className="flex h-full items-center justify-center text-slate-600">
+          <div className="flex h-full items-center justify-center text-slate-500">
             <p>Waiting for hive mind synchronization...</p>
           </div>
         )}
