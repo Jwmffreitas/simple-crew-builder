@@ -11,7 +11,8 @@ import {
   Search,
   Trash2,
   Edit2,
-  X
+  X,
+  Moon
 } from 'lucide-react';
 import { useStore } from '../store';
 import { SettingsDrawer } from '../components/SettingsDrawer';
@@ -21,16 +22,19 @@ const Dashboard = () => {
   const savedProjects = useStore((state) => state.savedProjects);
   const setIsSettingsOpen = useStore((state) => state.setIsSettingsOpen);
   const fetchProjects = useStore((state) => state.fetchProjects);
+  const fetchCredentials = useStore((state) => state.fetchCredentials);
   const deleteProject = useStore((state) => state.deleteProject);
   const updateProjectMetadata = useStore((state) => state.updateProjectMetadata);
 
   const [openMenuId, setOpenMenuId] = React.useState<string | null>(null);
+  const [isSettingsMenuOpen, setIsSettingsMenuOpen] = React.useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = React.useState(false);
   const [editingProject, setEditingProject] = React.useState<{id: string, name: string, description: string} | null>(null);
 
   useEffect(() => {
     fetchProjects();
-  }, [fetchProjects]);
+    fetchCredentials();
+  }, [fetchProjects, fetchCredentials]);
 
   // Close menu on click outside
   useEffect(() => {
@@ -89,12 +93,42 @@ const Dashboard = () => {
           <button className="p-3 text-brand-muted hover:text-brand-text rounded-xl transition-all">
             <Key className="w-6 h-6" />
           </button>
-          <button 
-            onClick={() => setIsSettingsOpen(true)}
-            className="p-3 text-brand-muted hover:text-brand-text rounded-xl transition-all"
-          >
-            <Settings className="w-6 h-6" />
-          </button>
+          <div className="relative">
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsSettingsMenuOpen(!isSettingsMenuOpen);
+              }}
+              className={`p-3 rounded-xl transition-all ${isSettingsMenuOpen ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600' : 'text-brand-muted hover:text-brand-text'}`}
+            >
+              <Settings className="w-6 h-6" />
+            </button>
+            
+            {isSettingsMenuOpen && (
+              <div className="absolute left-full ml-2 bottom-0 w-48 bg-brand-card border border-brand-border rounded-xl shadow-xl z-20 py-1 overflow-hidden animate-in slide-in-from-left-2 duration-150">
+                <button 
+                  onClick={() => {
+                    navigate('/settings');
+                    setIsSettingsMenuOpen(false);
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-brand-muted hover:text-brand-text hover:bg-brand-bg transition-colors text-left"
+                >
+                  <Settings className="w-4 h-4" />
+                  Settings
+                </button>
+                <button 
+                  onClick={() => {
+                    setIsSettingsOpen(true);
+                    setIsSettingsMenuOpen(false);
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-brand-muted hover:text-brand-text hover:bg-brand-bg transition-colors text-left"
+                >
+                  <Moon className="w-4 h-4" />
+                  Theme
+                </button>
+              </div>
+            )}
+          </div>
         </nav>
       </aside>
 

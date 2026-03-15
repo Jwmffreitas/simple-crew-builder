@@ -44,6 +44,15 @@ export interface Project {
   updated_at: string;
 }
 
+export interface Credential {
+  id: string;
+  name: string;
+  description: string;
+  key: string;
+  provider?: string;
+  created_at: string;
+}
+
 export interface AppNotification {
   message: string;
   type: 'success' | 'error' | 'warning' | 'info';
@@ -96,4 +105,10 @@ export interface AppState {
   resetProject: () => void;
   duplicateProject: (id: string) => Promise<void>;
   updateProjectMetadata: (id: string, name: string, description: string) => Promise<void>;
+  credentials: Credential[];
+  fetchCredentials: () => Promise<void>;
+  defaultModel: string;
+  addCredential: (credential: Omit<Credential, 'id' | 'created_at'>) => void;
+  deleteCredential: (id: string) => void;
+  setDefaultModel: (model: string) => void;
 }

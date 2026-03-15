@@ -54,3 +54,39 @@ class ProjectUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     canvas_data: Optional[Dict[str, Any]] = None
+
+# Schemas para CRUD de Credenciais
+class CredentialBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    provider: Optional[str] = None
+
+class CredentialCreate(CredentialBase):
+    key: str
+
+class CredentialRead(CredentialBase):
+    id: Any
+    key: str
+    created_at: Any
+    updated_at: Any
+
+    @classmethod
+    def from_orm(cls, obj):
+        # Mascara a chave por segurança
+        data = obj.__dict__.copy()
+        raw_key = data.get('key', '')
+        if raw_key:
+            if len(raw_key) > 8:
+                data['key'] = f"{raw_key[:4]}••••{raw_key[-4:]}"
+            else:
+                data['key'] = "••••••••"
+        return cls(**data)
+
+    class Config:
+        from_attributes = True
+
+class CredentialUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    key: Optional[str] = None
+    provider: Optional[str] = None

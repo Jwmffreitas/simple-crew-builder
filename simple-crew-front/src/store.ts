@@ -121,6 +121,8 @@ export const useStore = create<AppState>((set, get) => ({
   isConsoleExpanded: false,
   theme: (localStorage.getItem('theme') as 'light' | 'dark') || 'light',
   isSettingsOpen: false,
+  credentials: [],
+  defaultModel: localStorage.getItem('default_model') || 'gpt-4o',
   setIsSettingsOpen: (open) => set({ isSettingsOpen: open }),
   toggleTheme: () => {
     set((state) => {
@@ -690,5 +692,51 @@ export const useStore = create<AppState>((set, get) => ({
       console.error("Update project metadata error:", error);
       toast.error("Error updating project");
     }
+  },
+  fetchCredentials: async () => {
+    try {
+      const response = await fetch('http://localhost:8000/api/v1/credentials');
+      if (!response.ok) throw new Error('Failed to fetch credentials');
+      const credentials = await response.json();
+      set({ credentials });
+    } catch (error: any) {
+      console.error("Fetch credentials error:", error);
+    }
+  },
+  addCredential: async (cred) => {
+    try {
+      const response = await fetch('http://localhost:8000/api/v1/credentials', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cred),
+      });
+
+      if (!response.ok) throw new Error('Failed to add credential');
+
+      toast.success("Credential added successfully");
+      await get().fetchCredentials();
+    } catch (error: any) {
+      console.error("Add credential error:", error);
+      toast.error("Error adding credential");
+    }
+  },
+  deleteCredential: async (id) => {
+    try {
+      const response = await fetch(`http://localhost:8000/api/v1/credentials/${id}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) throw new Error('Failed to delete credential');
+
+      toast.success("Credential removed");
+      await get().fetchCredentials();
+    } catch (error: any) {
+      console.error("Delete credential error:", error);
+      toast.error("Error deleting credential");
+    }
+  },
+  setDefaultModel: (model: string) => {
+    localStorage.setItem('default_model', model);
+    set({ defaultModel: model });
   },
 }));

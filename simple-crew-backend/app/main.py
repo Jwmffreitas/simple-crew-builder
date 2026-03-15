@@ -6,8 +6,8 @@ from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select
 from .crew_builder import run_crew_stream
 from .database import init_db, get_session
-from .models import CrewProject, User
-from .schemas import GraphData, ProjectCreate, ProjectRead, ProjectUpdate
+from .models import CrewProject, User, Credential
+from .schemas import GraphData, ProjectCreate, ProjectRead, ProjectUpdate, CredentialCreate, CredentialRead, CredentialUpdate
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -130,3 +130,38 @@ async def delete_project(project_id: str, session: Session = Depends(get_session
     session.delete(project)
     session.commit()
     return {"message": "Projeto removido com sucesso"}
+
+# --- CRUD de Credenciais ---
+
+@app.post("/api/v1/credentials", response_model=CredentialRead)
+async def create_credential(credential: CredentialCreate, session: Session = Depends(get_session)):
+    new_credential = Credential(
+        **credential.model_dump(),
+        user_id=ROOT_USER_ID
+    )
+    session.add(new_credential)
+    session.commit()
+    session.refresh(new_credential)
+    return CredentialRead.from_orm(new_credential)
+
+@app.get("/api/v1/credentials", response_model=List[CredentialRead])
+async def list_credentials(session: Session = Depends(get_session)):
+    statement = select(Credential).where(Credential.user_id == ROOT_USER_ID).order_by(Credential.created_at.desc())
+    credentials = session.exec(statement).all()
+    return [CredentialRead.from_orm(c) for c in credentials]
+
+@app.get("/api/v1/credentials/{credential_id}", response_model=CredentialRead)
+async def get_credential(credential_id: str, session: Session = Depends(get_session)):
+    credential = session.get(Credential, credential_id)
+    if not credential:
+        raise HTTPException(status_code=404, detail="Credencial não encontrada")
+    return CredentialRead.from_orm(credential)
+
+@app.delete("/api/v1/credentials/{credential_id}")
+async def delete_credential(credential_id: str, session: Session = Depends(get_session)):
+    credential = session.get(Credential, credential_id)
+    if not credential:
+        raise HTTPException(status_code=404, detail="Credencial não encontrada")
+    session.delete(credential)
+    session.commit()
+    return {"message": "Credencial removida com sucesso"}
