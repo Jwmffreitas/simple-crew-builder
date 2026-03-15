@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { useStore } from './store';
+import { useStore } from '../store';
 import { Terminal, X, Minimize2, Maximize2, Loader2, Sparkles, CheckCircle2 } from 'lucide-react';
 
 export function ConsoleDrawer() {

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Trash2, GripVertical } from 'lucide-react';
-import { useStore } from './store';
-import type { AppState, ProcessType, AppNode } from './types';
+import { useStore } from '../store';
+import type { AppState, ProcessType, AppNode } from '../types';
 import {
   DndContext,
   closestCenter,

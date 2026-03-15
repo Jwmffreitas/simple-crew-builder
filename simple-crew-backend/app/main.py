@@ -106,6 +106,7 @@ async def get_project(project_id: str, session: Session = Depends(get_session)):
     return project
 
 @app.patch("/api/v1/projects/{project_id}", response_model=ProjectRead)
+@app.put("/api/v1/projects/{project_id}", response_model=ProjectRead)
 async def update_project(project_id: str, project_update: ProjectUpdate, session: Session = Depends(get_session)):
     db_project = session.get(CrewProject, project_id)
     if not db_project:

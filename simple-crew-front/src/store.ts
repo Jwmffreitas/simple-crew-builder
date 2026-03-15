@@ -635,5 +635,60 @@ export const useStore = create<AppState>((set, get) => ({
       }),
     }));
   },
-}));
+  resetProject: () => {
+    set({
+      nodes: [],
+      edges: [],
+      currentProjectId: null,
+      nodeStatuses: {},
+      nodeErrors: {},
+      executionResult: null
+    });
+  },
 
+  duplicateProject: async (id: string) => {
+    try {
+      const response = await fetch(`http://localhost:8000/api/v1/projects/${id}`);
+      if (!response.ok) throw new Error('Failed to fetch project for duplication');
+
+      const project = await response.json();
+
+      const duplicatedProject = {
+        name: `${project.name} (Copy)`,
+        description: project.description,
+        canvas_data: project.canvas_data
+      };
+
+      const saveResponse = await fetch('http://localhost:8000/api/v1/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(duplicatedProject),
+      });
+
+      if (!saveResponse.ok) throw new Error('Failed to save duplicated project');
+
+      toast.success("Project duplicated successfully");
+      await get().fetchProjects();
+    } catch (error: any) {
+      console.error("Duplicate project error:", error);
+      toast.error("Error duplicating project");
+    }
+  },
+  updateProjectMetadata: async (id: string, name: string, description: string) => {
+    try {
+      const response = await fetch(`http://localhost:8000/api/v1/projects/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, description }),
+      });
+
+      if (!response.ok) throw new Error('Failed to update project metadata');
+
+      toast.success("Project updated successfully");
+      await get().fetchProjects();
+    } catch (error: any) {
+      console.error("Update project metadata error:", error);
+      toast.error("Error updating project");
+    }
+  },
+}));

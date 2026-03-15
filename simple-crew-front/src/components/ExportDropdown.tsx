@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Download, Code, FileText, ChevronDown } from 'lucide-react';
-import { useStore } from './store';
+import { useStore } from '../store';
 
 export function ExportDropdown() {
   const [isOpen, setIsOpen] = useState(false);

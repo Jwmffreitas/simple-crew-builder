@@ -1,5 +1,5 @@
 import { X, Moon, Sun, Bell, Shield, Info } from 'lucide-react';
-import { useStore } from './store';
+import { useStore } from '../store';
 
 export function SettingsDrawer() {
   const isSettingsOpen = useStore((state) => state.isSettingsOpen);

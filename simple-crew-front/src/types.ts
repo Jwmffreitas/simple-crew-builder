@@ -93,4 +93,7 @@ export interface AppState {
   toggleTheme: () => void;
   isSettingsOpen: boolean;
   setIsSettingsOpen: (open: boolean) => void;
+  resetProject: () => void;
+  duplicateProject: (id: string) => Promise<void>;
+  updateProjectMetadata: (id: string, name: string, description: string) => Promise<void>;
 }
