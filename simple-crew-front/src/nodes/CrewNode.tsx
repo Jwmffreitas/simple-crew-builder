@@ -1,16 +1,23 @@
+import { memo } from 'react';
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
+import { useShallow } from 'zustand/shallow';
 import { Users, Trash2, ChevronDown, ChevronUp, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useStore } from '../store';
 import type { CrewNodeData } from '../types';
 
-export function CrewNode({ id, data }: NodeProps<Node<CrewNodeData, 'crew'>>) {
-  const deleteNode = useStore((state) => state.deleteNode);
-  const toggleCollapse = useStore((state) => state.toggleCollapse);
-  const edges = useStore((state) => state.edges);
+export const CrewNode = memo(({ id, data }: NodeProps<Node<CrewNodeData, 'crew'>>) => {
+  const { deleteNode, toggleCollapse } = useStore(
+    useShallow((state) => ({
+      deleteNode: state.deleteNode,
+      toggleCollapse: state.toggleCollapse,
+    }))
+  );
+  
   const status = useStore((state) => state.nodeStatuses[id] || 'idle');
   const errors = useStore((state) => state.nodeErrors[id]);
 
-  const childCount = edges.filter((edge) => edge.source === id).length;
+  // Seletor granular para contar agentes filhos
+  const childCount = useStore((state) => state.edges.filter((edge) => edge.source === id).length);
 
   const statusClasses = errors?.length
     ? 'ring-2 ring-red-400 ring-offset-2'
@@ -22,7 +29,7 @@ export function CrewNode({ id, data }: NodeProps<Node<CrewNodeData, 'crew'>>) {
 
   return (
     <div 
-      className={`group relative bg-white dark:bg-slate-900 rounded-xl shadow-sm hover:shadow-md dark:shadow-none border border-slate-200 dark:border-slate-700 w-48 overflow-visible transition-all cursor-pointer ${statusClasses} ${status === 'running' ? 'running' : ''}`}
+      className={`group relative bg-white dark:bg-slate-900 rounded-xl shadow-sm hover:shadow-md dark:shadow-none border border-slate-200 dark:border-slate-700 w-48 overflow-visible transition-colors transition-shadow duration-300 cursor-pointer will-change-transform ${statusClasses} ${status === 'running' ? 'running' : ''}`}
       style={{ '--node-color': '#8b5cf6' } as React.CSSProperties}
     >
 
@@ -94,4 +101,4 @@ export function CrewNode({ id, data }: NodeProps<Node<CrewNodeData, 'crew'>>) {
       <Handle type="source" position={Position.Left} id="left" className="w-2 h-2 bg-gray-400 border-none hover:bg-violet-500 transition-colors" />
     </div>
   );
-}
+});

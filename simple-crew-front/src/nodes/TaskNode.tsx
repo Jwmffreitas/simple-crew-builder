@@ -1,10 +1,16 @@
+import { memo } from 'react';
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
+import { useShallow } from 'zustand/shallow';
 import { CheckSquare, Trash2, Loader2, CheckCircle2, AlertCircle, Clock } from 'lucide-react';
 import { useStore } from '../store';
 import type { TaskNodeData } from '../types';
 
-export function TaskNode({ id, data }: NodeProps<Node<TaskNodeData, 'task'>>) {
-  const deleteNode = useStore((state) => state.deleteNode);
+export const TaskNode = memo(({ id, data }: NodeProps<Node<TaskNodeData, 'task'>>) => {
+  const { deleteNode } = useStore(
+    useShallow((state) => ({
+      deleteNode: state.deleteNode,
+    }))
+  );
   const status = useStore((state) => state.nodeStatuses[id] || 'idle');
   const errors = useStore((state) => state.nodeErrors[id]);
 
@@ -22,7 +28,7 @@ export function TaskNode({ id, data }: NodeProps<Node<TaskNodeData, 'task'>>) {
 
   return (
     <div 
-      className={`group relative bg-white dark:bg-slate-900 rounded-xl shadow-sm hover:shadow-md dark:shadow-none border border-slate-200 dark:border-slate-700 w-56 overflow-visible transition-all cursor-pointer ${statusClasses} ${status === 'running' ? 'running' : ''}`}
+      className={`group relative bg-white dark:bg-slate-900 rounded-xl shadow-sm hover:shadow-md dark:shadow-none border border-slate-200 dark:border-slate-700 w-56 overflow-visible transition-colors transition-shadow duration-300 cursor-pointer will-change-transform ${statusClasses} ${status === 'running' ? 'running' : ''}`}
       style={{ '--node-color': '#10b981' } as React.CSSProperties}
     >
 
@@ -80,4 +86,4 @@ export function TaskNode({ id, data }: NodeProps<Node<TaskNodeData, 'task'>>) {
       <Handle type="target" position={Position.Left} id="left" className="w-2 h-2 bg-gray-400 border-none hover:bg-emerald-500 transition-colors" />
     </div>
   );
-}
+});

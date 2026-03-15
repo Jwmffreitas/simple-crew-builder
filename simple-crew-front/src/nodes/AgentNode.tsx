@@ -1,18 +1,26 @@
+import { memo } from 'react';
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
+import { useShallow } from 'zustand/shallow';
 import { User, Trash2, ChevronDown, ChevronUp, CheckSquare, Loader2, CheckCircle2, AlertCircle, Cpu, Clock } from 'lucide-react';
 import { useStore } from '../store';
 import type { AgentNodeData, NodeStatus } from '../types';
 
-export function AgentNode({ id, data }: NodeProps<Node<AgentNodeData, 'agent'>>) {
-  const deleteNode = useStore((state) => state.deleteNode);
-  const toggleCollapse = useStore((state) => state.toggleCollapse);
-  const updateNodeData = useStore((state) => state.updateNodeData);
+export const AgentNode = memo(({ id, data }: NodeProps<Node<AgentNodeData, 'agent'>>) => {
+  // Ações estáveis via useShallow
+  const { deleteNode, toggleCollapse, updateNodeData } = useStore(
+    useShallow((state) => ({
+      deleteNode: state.deleteNode,
+      toggleCollapse: state.toggleCollapse,
+      updateNodeData: state.updateNodeData,
+    }))
+  );
+
   const models = useStore((state) => state.models);
-  const edges = useStore((state) => state.edges);
   const status = useStore((state) => (state.nodeStatuses[id] as NodeStatus) || 'idle');
   const errors = useStore((state) => state.nodeErrors[id]);
-
-  const childCount = edges.filter((edge) => edge.source === id).length;
+  
+  // Seletor granular: Só re-renderiza se o COUNT de arestas DESTE nó mudar
+  const childCount = useStore((state) => state.edges.filter((edge) => edge.source === id).length);
 
   const statusClasses = errors?.length
     ? 'ring-2 ring-red-400 ring-offset-2'
@@ -28,7 +36,7 @@ export function AgentNode({ id, data }: NodeProps<Node<AgentNodeData, 'agent'>>)
 
   return (
     <div 
-      className={`group relative bg-white dark:bg-slate-900 rounded-xl shadow-sm hover:shadow-md dark:shadow-none border border-slate-200 dark:border-slate-700 w-56 overflow-visible transition-all cursor-pointer ${statusClasses} ${status === 'running' ? 'running' : ''}`}
+      className={`group relative bg-white dark:bg-slate-900 rounded-xl shadow-sm hover:shadow-md dark:shadow-none border border-slate-200 dark:border-slate-700 w-56 overflow-visible transition-colors transition-shadow duration-300 cursor-pointer will-change-transform ${statusClasses} ${status === 'running' ? 'running' : ''}`}
       style={{ '--node-color': '#3b82f6' } as React.CSSProperties}
     >
 
@@ -135,4 +143,4 @@ export function AgentNode({ id, data }: NodeProps<Node<AgentNodeData, 'agent'>>)
       <Handle type="source" position={Position.Left} id="left-source" className="w-2 h-2 bg-gray-400 border-none hover:bg-blue-500 transition-colors" />
     </div>
   );
-}
+});

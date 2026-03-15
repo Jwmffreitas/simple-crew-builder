@@ -1,7 +1,8 @@
-import React, { useCallback, useRef, useEffect } from 'react';
+import React, { useCallback, useRef, useMemo, useEffect } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { ReactFlow, Background, Controls, MiniMap, ReactFlowProvider, useReactFlow, BackgroundVariant } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { useShallow } from 'zustand/shallow';
 import { Play, Sparkles, Save, Loader2, ArrowLeft } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 
@@ -30,32 +31,96 @@ const edgeTypes = {
 
 const getId = () => `dndnode_${crypto.randomUUID()}`;
 
+// 1. O Canvas Isolado (Re-renderiza 60x/seg no drag de forma ultra-leve)
+const FlowCanvas = () => {
+  const { screenToFlowPosition } = useReactFlow();
+  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode, setActiveNode, validateGraph, theme } = useStore(
+    useShallow((state) => ({
+      nodes: state.nodes,
+      edges: state.edges,
+      onNodesChange: state.onNodesChange,
+      onEdgesChange: state.onEdgesChange,
+      onConnect: state.onConnect,
+      addNode: state.addNode,
+      setActiveNode: state.setActiveNode,
+      validateGraph: state.validateGraph,
+      theme: state.theme
+    }))
+  );
+
+  const onDragOver = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+  }, []);
+
+  const onDrop = useCallback((event: React.DragEvent) => {
+      event.preventDefault();
+      const type = event.dataTransfer.getData('application/reactflow');
+      if (!type) return;
+
+      const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+      let data = {};
+      const timestamp = Date.now().toString().slice(-4);
+      if (type === 'agent') data = { name: `Novo Agente ${timestamp}`, role: '', goal: '', backstory: '', isCollapsed: false };
+      else if (type === 'task') data = { name: `Nova Tarefa ${timestamp}`, description: '', expected_output: '' };
+      else if (type === 'crew') data = { process: 'sequential', isCollapsed: false };
+
+      addNode({ id: getId(), type, position, data } as any);
+      validateGraph();
+  }, [screenToFlowPosition, addNode, validateGraph]);
+
+  const onNodeDoubleClick = useCallback((_event: React.MouseEvent, node: any) => {
+      setActiveNode(node.id);
+  }, [setActiveNode]);
+
+  return (
+    <ReactFlow
+      nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect}
+      onNodeDoubleClick={onNodeDoubleClick} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
+      onDragOver={onDragOver} onDrop={onDrop} fitView minZoom={0.2} maxZoom={4}
+      defaultEdgeOptions={{ type: 'deletable', style: { strokeWidth: 2, stroke: theme === 'dark' ? '#334155' : '#94a3b8' }, animated: true }}
+    >
+      <Background gap={16} size={1} color="var(--canvas-dots)" style={{ backgroundColor: 'var(--bg-main)' }} variant={BackgroundVariant.Dots} />
+      <Controls className="!bg-brand-card !border-brand-border !text-brand-muted hover:!bg-brand-bg !shadow-md !rounded-lg mb-4 ml-4" />
+      <MiniMap className="!bg-brand-card !border-brand-border !shadow-md !rounded-lg overflow-hidden mb-4 mr-4" zoomable pannable 
+        nodeColor={(node) => {
+          if (node.type === 'agent') return '#3b82f6';
+          if (node.type === 'task') return '#10b981';
+          if (node.type === 'crew') return '#8b5cf6';
+          return '#e2e8f0';
+        }} />
+    </ReactFlow>
+  );
+};
+
+// 2. Componente Pai (Fica 100% estático durante o drag)
 function FlowBuilder() {
   const { id } = useParams();
   const navigate = useNavigate();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition } = useReactFlow();
 
-  const nodes = useStore((state) => state.nodes);
-  const edges = useStore((state) => state.edges);
-  const setActiveNode = useStore((state) => state.setActiveNode);
-  const onNodesChange = useStore((state) => state.onNodesChange);
-  const onEdgesChange = useStore((state) => state.onEdgesChange);
-  const onConnect = useStore((state) => state.onConnect);
-  const addNode = useStore((state) => state.addNode);
-
-  const isExecuting = useStore((state) => state.isExecuting);
-  const startRealExecution = useStore((state) => state.startRealExecution);
-  const executionResult = useStore((state) => state.executionResult);
-  const setIsConsoleExpanded = useStore((state) => state.setIsConsoleExpanded);
-  const setIsConsoleOpen = useStore((state) => state.setIsConsoleOpen);
-  const nodeStatuses = useStore((state) => state.nodeStatuses);
-  const loadProject = useStore((state) => state.loadProject);
-  const saveProject = useStore((state) => state.saveProject);
-  const currentProjectId = useStore((state) => state.currentProjectId);
-  const isSaving = useStore((state) => state.isSaving);
-  const theme = useStore((state) => state.theme);
-  const resetProject = useStore((state) => state.resetProject);
+  const { 
+    isExecuting, startRealExecution, executionResult, setIsConsoleExpanded, setIsConsoleOpen, 
+    loadProject, saveProject, currentProjectId, isSaving, resetProject, validateGraph, 
+    showNotification, updateProjectMetadata, savedProjects
+  } = useStore(
+    useShallow((state) => ({
+      isExecuting: state.isExecuting,
+      startRealExecution: state.startRealExecution,
+      executionResult: state.executionResult,
+      setIsConsoleExpanded: state.setIsConsoleExpanded,
+      setIsConsoleOpen: state.setIsConsoleOpen,
+      loadProject: state.loadProject,
+      saveProject: state.saveProject,
+      currentProjectId: state.currentProjectId,
+      isSaving: state.isSaving,
+      resetProject: state.resetProject,
+      validateGraph: state.validateGraph,
+      showNotification: state.showNotification,
+      updateProjectMetadata: state.updateProjectMetadata,
+      savedProjects: state.savedProjects
+    }))
+  );
 
   const lastLoadedId = useRef<string | null>(null);
 
@@ -71,96 +136,10 @@ function FlowBuilder() {
     }
   }, [id, loadProject, resetProject]);
 
-
-  const validateGraph = useStore((state) => state.validateGraph);
-  const showNotification = useStore((state) => state.showNotification);
-
-  const handleRunCrew = () => {
-    if (!validateGraph()) {
-      showNotification("There are errors in your flow. Fix the nodes marked in red before proceeding.", "error");
-      return;
-    }
-    showNotification("Agent execution started successfully. Follow the execution.", "info");
-    startRealExecution();
-  };
-
-  const onDragOver = useCallback((event: React.DragEvent) => {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-  }, []);
-
-  const onDrop = useCallback(
-    (event: React.DragEvent) => {
-      event.preventDefault();
-
-      const type = event.dataTransfer.getData('application/reactflow');
-
-      if (typeof type === 'undefined' || !type) {
-        return;
-      }
-
-      const position = screenToFlowPosition({
-        x: event.clientX,
-        y: event.clientY,
-      });
-
-      let data = {};
-      const timestamp = Date.now().toString().slice(-4);
-      if (type === 'agent') {
-        data = { name: `Novo Agente ${timestamp}`, role: '', goal: '', backstory: '', isCollapsed: false };
-      } else if (type === 'task') {
-        data = { name: `Nova Tarefa ${timestamp}`, description: '', expected_output: '' };
-      } else if (type === 'crew') {
-        data = { process: 'sequential', isCollapsed: false };
-      }
-
-      const newNode = {
-        id: getId(),
-        type,
-        position,
-        data,
-      };
-
-      addNode(newNode as any);
-      validateGraph();
-    },
-    [screenToFlowPosition, addNode, validateGraph],
-  );
-
-  const onNodeDoubleClick = useCallback(
-    (_event: React.MouseEvent, node: any) => {
-      setActiveNode(node.id);
-    },
-    [setActiveNode]
-  );
-
-  const edgesWithAnimation = edges.map(e => {
-    const sourceStatus = nodeStatuses[e.source];
-    const targetStatus = nodeStatuses[e.target];
-
-    const isRunning = sourceStatus === 'running' || targetStatus === 'running';
-    const isSuccess = sourceStatus === 'success' && targetStatus === 'success';
-
-    let strokeColor = '#94a3b8';
-    if (isRunning) strokeColor = '#3b82f6';
-    else if (isSuccess) strokeColor = '#10b981';
-
-    return {
-      ...e,
-      animated: true,
-      style: {
-        ...e.style,
-        stroke: strokeColor,
-        strokeWidth: isRunning ? 3 : 2,
-        transition: 'stroke 0.5s ease, stroke-width 0.5s ease'
-      }
-    };
-  });
-
   const [isEditingTitle, setIsEditingTitle] = React.useState(false);
   const [editedTitle, setEditedTitle] = React.useState('');
-  const updateProjectMetadata = useStore((state) => state.updateProjectMetadata);
-  const currentProject = useStore((state) => state.savedProjects.find(p => p.id === id));
+  
+  const currentProject = useMemo(() => savedProjects.find(p => p.id === id), [savedProjects, id]);
 
   useEffect(() => {
     if (currentProject) {
@@ -173,6 +152,15 @@ function FlowBuilder() {
       await updateProjectMetadata(id, editedTitle, currentProject?.description || '');
     }
     setIsEditingTitle(false);
+  };
+
+  const handleRunCrew = () => {
+    if (!validateGraph()) {
+      showNotification("There are errors in your flow. Fix the nodes marked in red before proceeding.", "error");
+      return;
+    }
+    showNotification("Agent execution started successfully. Follow the execution.", "info");
+    startRealExecution();
   };
 
   return (
@@ -259,48 +247,7 @@ function FlowBuilder() {
       <div className="flex-1 w-full h-full flex flex-row relative">
         <Sidebar />
         <div className="flex-1 h-full" ref={reactFlowWrapper}>
-          <ReactFlow
-            nodes={nodes}
-            edges={edgesWithAnimation}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onNodeDoubleClick={onNodeDoubleClick}
-            nodeTypes={nodeTypes}
-            edgeTypes={edgeTypes}
-            onDragOver={onDragOver}
-            onDrop={onDrop}
-            fitView
-            minZoom={0.2}
-            maxZoom={4}
-            defaultEdgeOptions={{
-              type: 'deletable',
-              style: { strokeWidth: 2, stroke: theme === 'dark' ? '#334155' : '#94a3b8' },
-              animated: true
-            }}
-          >
-            <Background
-              gap={16}
-              size={1}
-              color="var(--canvas-dots)"
-              style={{ backgroundColor: 'var(--bg-main)' }}
-              variant={BackgroundVariant.Dots}
-            />
-            <Controls className="!bg-brand-card !border-brand-border !text-brand-muted hover:!bg-brand-bg !shadow-md !rounded-lg mb-4 ml-4" />
-            <MiniMap
-              className="!bg-brand-card !border-brand-border !shadow-md !rounded-lg overflow-hidden mb-4 mr-4"
-              zoomable
-              pannable
-              nodeColor={(node) => {
-                switch (node.type) {
-                  case 'agent': return '#3b82f6';
-                  case 'task': return '#10b981';
-                  case 'crew': return '#8b5cf6';
-                  default: return '#e2e8f0';
-                }
-              }}
-            />
-          </ReactFlow>
+          <FlowCanvas />
         </div>
         <NodeConfigDrawer />
         <ConsoleDrawer />

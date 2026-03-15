@@ -47,7 +47,7 @@ body,
 
 /* Node Styling & Contrast Enhancement */
 .react-flow__node {
-  transition: transform 0.2s ease, box-shadow 0.3s ease;
+  transition: box-shadow 0.3s ease;
 }
 
 .react-flow__node > div {
