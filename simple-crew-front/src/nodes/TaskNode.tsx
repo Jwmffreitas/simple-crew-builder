@@ -1,5 +1,5 @@
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
-import { CheckSquare, Trash2, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { CheckSquare, Trash2, Loader2, CheckCircle2, AlertCircle, Clock } from 'lucide-react';
 import { useStore } from '../store';
 import type { TaskNodeData } from '../types';
 
@@ -10,11 +10,15 @@ export function TaskNode({ id, data }: NodeProps<Node<TaskNodeData, 'task'>>) {
 
   const statusClasses = errors?.length
     ? 'ring-2 ring-red-400 ring-offset-2'
-    : status === 'running'
-      ? 'ring-2 ring-blue-500 ring-offset-2 animate-pulse'
-      : status === 'success'
-        ? 'ring-2 ring-green-500 ring-offset-2'
-        : 'hover:ring-2 hover:ring-emerald-400';
+    : status === 'waiting'
+      ? 'ring-2 ring-amber-400/50 ring-offset-1'
+      : status === 'running'
+        ? 'ring-2 ring-blue-500 ring-offset-2 animate-pulse'
+        : status === 'success'
+          ? 'ring-2 ring-green-500 ring-offset-2'
+          : status === 'error'
+            ? 'ring-2 ring-red-500 ring-offset-2'
+            : 'hover:ring-2 hover:ring-emerald-400';
 
   return (
     <div 
@@ -22,6 +26,11 @@ export function TaskNode({ id, data }: NodeProps<Node<TaskNodeData, 'task'>>) {
       style={{ '--node-color': '#10b981' } as React.CSSProperties}
     >
 
+      {status === 'waiting' && (
+        <div className="absolute -top-2 -right-2 bg-white dark:bg-slate-900 rounded-full p-0.5 shadow-md z-20 border border-slate-100 dark:border-slate-800 animate-in zoom-in duration-200">
+          <Clock className="w-5 h-5 text-amber-500" />
+        </div>
+      )}
       {status === 'running' && (
         <div className="absolute -top-2 -right-2 bg-white dark:bg-slate-900 rounded-full p-0.5 shadow-md z-20 border border-slate-100 dark:border-slate-800">
           <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
@@ -30,6 +39,11 @@ export function TaskNode({ id, data }: NodeProps<Node<TaskNodeData, 'task'>>) {
       {status === 'success' && (
         <div className="absolute -top-2 -right-2 bg-white dark:bg-slate-900 rounded-full p-0.5 shadow-md z-20 border border-slate-100 dark:border-slate-800">
           <CheckCircle2 className="w-5 h-5 text-green-500" />
+        </div>
+      )}
+      {status === 'error' && (
+        <div className="absolute -top-2 -right-2 bg-white dark:bg-slate-900 rounded-full p-0.5 shadow-md z-20 border border-slate-100 dark:border-slate-800 animate-in zoom-in duration-200">
+          <AlertCircle className="w-5 h-5 text-red-500" />
         </div>
       )}
 

@@ -274,16 +274,24 @@ export const useStore = create<AppState>((set, get) => ({
   setIsConsoleExpanded: (isExpanded) => set({ isConsoleExpanded: isExpanded }),
 
   startRealExecution: async () => {
-    // Abre a gaveta de cara pra mostrar que começou
-    set({
-      isExecuting: true,
-      nodeStatuses: {},
+    // Abre a gaveta de cara pra mostrar que começou e prepara o "Waiting"
+    const state = get();
+    const initialStatuses: Record<string, NodeStatus> = {};
+    state.nodes.forEach(node => {
+      if (node.type === 'agent' || node.type === 'task') {
+        initialStatuses[node.id] = 'waiting';
+      }
+    });
+
+    set({ 
+      isExecuting: true, 
+      nodeStatuses: initialStatuses, 
       executionResult: null,
       isConsoleOpen: true,
       isConsoleExpanded: false
     });
 
-    const state = get();
+
     const payload = {
       version: "1.0",
       nodes: state.nodes,
@@ -316,16 +324,21 @@ export const useStore = create<AppState>((set, get) => ({
       if (!reader) throw new Error("Stream API não suportado pelo Browser");
 
       const decoder = new TextDecoder("utf-8");
+      let hasError = false;
 
       while (true) {
         const { value, done } = await reader.read();
 
-        // Sentry de Fim de Stream Abrupto/Resiliente
+        // 3.1 Sentry de Fim de Stream Abrupto/Resiliente
         if (done) {
-          if (get().isExecuting) {
-            const newStatuses: Record<string, NodeStatus> = {};
-            state.nodes.forEach(n => newStatuses[n.id] = 'success');
+          if (get().isExecuting && !hasError) {
+            const newStatuses: Record<string, NodeStatus> = { ...get().nodeStatuses };
+            state.nodes.forEach(n => {
+              if (newStatuses[n.id] === 'running') newStatuses[n.id] = 'success';
+            });
             set({ nodeStatuses: newStatuses, isExecuting: false });
+          } else {
+            set({ isExecuting: false });
           }
           break;
         }
@@ -338,55 +351,63 @@ export const useStore = create<AppState>((set, get) => ({
             const event = JSON.parse(line);
 
             if (event.type === 'heartbeat') {
-              continue; // Só ignora e mantem a conexão viva
+              continue; 
 
             } else if (event.type === 'status') {
-              // Uma Task ou Agent acendeu via Callback do Python!
               get().setNodeStatus(event.nodeId, event.status);
 
             } else if (event.type === 'task_completed') {
               get().setNodeStatus(event.task_id, 'success');
 
             } else if (event.type === 'log') {
-              // Limpeza de Códigos ANSI
               const stripAnsi = (str: string) => str.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '');
               const cleanLog = stripAnsi(event.data);
-
               const currentLog = get().executionResult || "";
               set({ executionResult: currentLog + cleanLog });
 
             } else if (event.type === 'final_result') {
-              // Final do funil e acende a Coroa Mestra (Opcional, varrendo tudo pra green)
-              const newStatuses: Record<string, NodeStatus> = {};
-              state.nodes.forEach(n => newStatuses[n.id] = 'success');
-              set({
-                nodeStatuses: newStatuses,
-                isExecuting: false,
-                isConsoleExpanded: true,
-                executionResult: event.result // Sobrescreve a tela de logs pelo belo Relatório Final
-              });
-              get().showNotification("A IA completou todo o pipeline de Agentes!", "success");
+              if (!hasError) {
+                const newStatuses: Record<string, NodeStatus> = { ...get().nodeStatuses };
+                state.nodes.forEach(n => {
+                  if (newStatuses[n.id] === 'running') newStatuses[n.id] = 'success';
+                });
+                set({
+                  nodeStatuses: newStatuses,
+                  isConsoleExpanded: true,
+                  executionResult: event.result 
+                });
+                get().showNotification("Pipeline de Agentes concluído!", "success");
+              }
 
             } else if (event.type === 'done') {
-              // Evento sentinela incondicional disparado pelo finally{} da thread
-              if (get().isExecuting) {
-                const newStatuses: Record<string, NodeStatus> = {};
-                state.nodes.forEach(n => newStatuses[n.id] = 'success');
+              if (!hasError) {
+                const newStatuses: Record<string, NodeStatus> = { ...get().nodeStatuses };
+                state.nodes.forEach(n => {
+                  if (newStatuses[n.id] === 'running') newStatuses[n.id] = 'success';
+                });
                 set({ nodeStatuses: newStatuses, isExecuting: false });
+              } else {
+                set({ isExecuting: false });
               }
 
             } else if (event.type === 'error') {
+              hasError = true;
+              const newStatuses: Record<string, NodeStatus> = { ...get().nodeStatuses };
+              state.nodes.forEach(n => {
+                if (newStatuses[n.id] === 'running') newStatuses[n.id] = 'error';
+              });
+              set({ nodeStatuses: newStatuses, isExecuting: false });
               throw new Error(event.error);
             }
-          } catch (e) {
-            // Pode ignorar falhas de JSON Parse se um stdout derramar mal formatado
+          } catch (e: any) {
+            if (e.message && hasError) throw e; // Repassa erros de negócio (event.error)
           }
         }
       }
 
     } catch (err: any) {
       console.error(err);
-      set({ isExecuting: false, nodeStatuses: {} });
+      set({ isExecuting: false });
       state.showNotification(`Falha na API Inteligente: ${err.message}`, "error");
     }
   },

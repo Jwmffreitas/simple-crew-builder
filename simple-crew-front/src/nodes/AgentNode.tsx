@@ -1,7 +1,7 @@
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
-import { User, Trash2, ChevronDown, ChevronUp, CheckSquare, Loader2, CheckCircle2, AlertCircle, Cpu } from 'lucide-react';
+import { User, Trash2, ChevronDown, ChevronUp, CheckSquare, Loader2, CheckCircle2, AlertCircle, Cpu, Clock } from 'lucide-react';
 import { useStore } from '../store';
-import type { AgentNodeData } from '../types';
+import type { AgentNodeData, NodeStatus } from '../types';
 
 export function AgentNode({ id, data }: NodeProps<Node<AgentNodeData, 'agent'>>) {
   const deleteNode = useStore((state) => state.deleteNode);
@@ -9,18 +9,22 @@ export function AgentNode({ id, data }: NodeProps<Node<AgentNodeData, 'agent'>>)
   const updateNodeData = useStore((state) => state.updateNodeData);
   const models = useStore((state) => state.models);
   const edges = useStore((state) => state.edges);
-  const status = useStore((state) => state.nodeStatuses[id] || 'idle');
+  const status = useStore((state) => (state.nodeStatuses[id] as NodeStatus) || 'idle');
   const errors = useStore((state) => state.nodeErrors[id]);
 
   const childCount = edges.filter((edge) => edge.source === id).length;
 
   const statusClasses = errors?.length
     ? 'ring-2 ring-red-400 ring-offset-2'
-    : status === 'running'
-      ? 'ring-2 ring-blue-500 ring-offset-2 animate-pulse'
-      : status === 'success'
-        ? 'ring-2 ring-green-500 ring-offset-2'
-        : 'hover:ring-2 hover:ring-blue-400';
+    : status === 'waiting'
+      ? 'ring-2 ring-amber-400/50 ring-offset-1'
+      : status === 'running'
+        ? 'ring-2 ring-blue-500 ring-offset-2 animate-pulse'
+        : status === 'success'
+          ? 'ring-2 ring-green-500 ring-offset-2'
+          : status === 'error'
+            ? 'ring-2 ring-red-500 ring-offset-2'
+            : 'hover:ring-2 hover:ring-blue-400';
 
   return (
     <div 
@@ -28,6 +32,11 @@ export function AgentNode({ id, data }: NodeProps<Node<AgentNodeData, 'agent'>>)
       style={{ '--node-color': '#3b82f6' } as React.CSSProperties}
     >
 
+      {status === 'waiting' && (
+        <div className="absolute -top-2 -right-2 bg-white dark:bg-slate-900 rounded-full p-0.5 shadow-md z-20 border border-slate-100 dark:border-slate-800 animate-in zoom-in duration-200">
+          <Clock className="w-5 h-5 text-amber-500" />
+        </div>
+      )}
       {status === 'running' && (
         <div className="absolute -top-2 -right-2 bg-white dark:bg-slate-900 rounded-full p-0.5 shadow-md z-20 border border-slate-100 dark:border-slate-800">
           <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
@@ -36,6 +45,11 @@ export function AgentNode({ id, data }: NodeProps<Node<AgentNodeData, 'agent'>>)
       {status === 'success' && (
         <div className="absolute -top-2 -right-2 bg-white dark:bg-slate-900 rounded-full p-0.5 shadow-md z-20 border border-slate-100 dark:border-slate-800">
           <CheckCircle2 className="w-5 h-5 text-green-500" />
+        </div>
+      )}
+      {status === 'error' && (
+        <div className="absolute -top-2 -right-2 bg-white dark:bg-slate-900 rounded-full p-0.5 shadow-md z-20 border border-slate-100 dark:border-slate-800 animate-in zoom-in duration-200">
+          <AlertCircle className="w-5 h-5 text-red-500" />
         </div>
       )}
 

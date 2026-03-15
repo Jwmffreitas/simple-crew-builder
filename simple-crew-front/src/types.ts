@@ -30,7 +30,7 @@ export type AppNode =
 
 export type AppEdge = Edge;
 
-export type NodeStatus = 'idle' | 'running' | 'success';
+export type NodeStatus = 'idle' | 'running' | 'success' | 'error' | 'waiting';
 
 export interface Project {
   id: string;
