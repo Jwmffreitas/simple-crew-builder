@@ -124,12 +124,79 @@ export const useStore = create<AppState>((set, get) => ({
   credentials: [],
   models: JSON.parse(localStorage.getItem('models') || '[]'),
   defaultModel: localStorage.getItem('default_model') || 'gpt-4o',
+  
+  globalTools: JSON.parse(localStorage.getItem('global_tools') || JSON.stringify([
+    { id: 'serper', name: 'Google Search (Serper)', description: 'Search the web for real-time information.', isEnabled: false, requiresKey: true },
+    { id: 'scrape', name: 'Website Scraper', description: 'Extract clean content from any website URL.', isEnabled: false, requiresKey: false },
+    { id: 'file_read', name: 'File System Reader', description: 'Read local files from the workspace.', isEnabled: true, requiresKey: false },
+  ])),
+  customTools: JSON.parse(localStorage.getItem('custom_tools') || '[]'),
+  mcpServers: JSON.parse(localStorage.getItem('mcp_servers') || '[]'),
+
   setIsSettingsOpen: (open) => set({ isSettingsOpen: open }),
   toggleTheme: () => {
     set((state) => {
       const newTheme = state.theme === 'light' ? 'dark' : 'light';
       localStorage.setItem('theme', newTheme);
       return { theme: newTheme };
+    });
+  },
+
+  updateToolConfig: (id, config) => {
+    set((state) => {
+      const newTools = state.globalTools.map(t => t.id === id ? { ...t, ...config } : t);
+      localStorage.setItem('global_tools', JSON.stringify(newTools));
+      return { globalTools: newTools };
+    });
+  },
+
+  addCustomTool: (tool) => {
+    set((state) => {
+      const newTool = { ...tool, id: crypto.randomUUID() };
+      const newTools = [...state.customTools, newTool];
+      localStorage.setItem('custom_tools', JSON.stringify(newTools));
+      return { customTools: newTools };
+    });
+  },
+
+  updateCustomTool: (id, config) => {
+    set((state) => {
+      const newTools = state.customTools.map(t => t.id === id ? { ...t, ...config } : t);
+      localStorage.setItem('custom_tools', JSON.stringify(newTools));
+      return { customTools: newTools };
+    });
+  },
+
+  deleteCustomTool: (id) => {
+    set((state) => {
+      const newTools = state.customTools.filter(t => t.id !== id);
+      localStorage.setItem('custom_tools', JSON.stringify(newTools));
+      return { customTools: newTools };
+    });
+  },
+
+  addMCPServer: (server) => {
+    set((state) => {
+      const newServer = { ...server, id: crypto.randomUUID() };
+      const newServers = [...state.mcpServers, newServer];
+      localStorage.setItem('mcp_servers', JSON.stringify(newServers));
+      return { mcpServers: newServers };
+    });
+  },
+
+  updateMCPServer: (id, config) => {
+    set((state) => {
+      const newServers = state.mcpServers.map(s => s.id === id ? { ...s, ...config } : s);
+      localStorage.setItem('mcp_servers', JSON.stringify(newServers));
+      return { mcpServers: newServers };
+    });
+  },
+
+  deleteMCPServer: (id) => {
+    set((state) => {
+      const newServers = state.mcpServers.filter(s => s.id !== id);
+      localStorage.setItem('mcp_servers', JSON.stringify(newServers));
+      return { mcpServers: newServers };
     });
   },
   setExecutionResult: (result) => set({ executionResult: result }),

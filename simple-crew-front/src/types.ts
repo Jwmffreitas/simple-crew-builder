@@ -73,6 +73,35 @@ export interface ModelConfig {
   isDefault: boolean;
 }
 
+export interface ToolConfig {
+  id: string;
+  name: string;
+  description: string;
+  isEnabled: boolean;
+  apiKey?: string;
+  requiresKey: boolean;
+}
+
+export interface CustomTool {
+  id: string;
+  name: string;
+  description: string;
+  code: string;
+}
+
+export interface MCPServer {
+  id: string;
+  name: string;
+  transportType: 'stdio' | 'sse';
+  // Stdio fields
+  command?: string;
+  args?: string[];
+  envVars?: Record<string, string>;
+  // SSE fields
+  url?: string;
+  headers?: Record<string, string>;
+}
+
 export interface AppState {
   nodes: AppNode[];
   edges: AppEdge[];
@@ -135,4 +164,17 @@ export interface AppState {
   
   defaultModel: string;
   setDefaultModel: (model: string) => void;
+
+  globalTools: ToolConfig[];
+  updateToolConfig: (id: string, config: Partial<ToolConfig>) => void;
+  
+  customTools: CustomTool[];
+  addCustomTool: (tool: Omit<CustomTool, 'id'>) => void;
+  updateCustomTool: (id: string, tool: Partial<CustomTool>) => void;
+  deleteCustomTool: (id: string) => void;
+
+  mcpServers: MCPServer[];
+  addMCPServer: (server: Omit<MCPServer, 'id'>) => void;
+  updateMCPServer: (id: string, server: Partial<MCPServer>) => void;
+  deleteMCPServer: (id: string) => void;
 }
