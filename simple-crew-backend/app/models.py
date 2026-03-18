@@ -25,6 +25,7 @@ class User(SQLModel, table=True):
     credentials: list["Credential"] = Relationship(back_populates="user")
     models: list["LLMModel"] = Relationship(back_populates="user")
     mcp_servers: list["MCPServer"] = Relationship(back_populates="user")
+    settings: Optional["AppSettings"] = Relationship(back_populates="user", sa_relationship_kwargs={"uselist": False})
 
 class CrewProject(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
@@ -126,3 +127,9 @@ class MCPServer(SQLModel, table=True):
             onupdate=func.now()
         )
     )
+
+class AppSettings(SQLModel, table=True):
+    user_id: uuid.UUID = Field(foreign_key="user.id", primary_key=True)
+    system_ai_model_id: Optional[uuid.UUID] = Field(default=None, foreign_key="llmmodel.id", sa_column_kwargs={"nullable": True})
+    
+    user: User = Relationship(back_populates="settings")

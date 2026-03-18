@@ -170,3 +170,49 @@ class MCPServerUpdate(BaseModel):
     env_vars: Optional[Dict[str, str]] = None
     url: Optional[str] = None
     headers: Optional[Dict[str, str]] = None
+
+# Schemas para Configurações do App
+class AppSettingsBase(BaseModel):
+    system_ai_model_id: Optional[Any] = None
+
+class AppSettingsRead(AppSettingsBase):
+    user_id: Any
+
+    class Config:
+        from_attributes = True
+
+class AppSettingsUpdate(BaseModel):
+    system_ai_model_id: Optional[Any] = None
+
+# Sugestões de IA
+class AiSuggestionRequest(BaseModel):
+    field: str  # role, goal, backstory
+    agent_name: str
+    workflow_name: Optional[str] = None
+    workflow_description: Optional[str] = None
+    current_value: Optional[str] = None
+
+class AiSuggestionResponse(BaseModel):
+    suggestion: str
+
+class AiBulkSuggestionRequest(BaseModel):
+    agent_name: str
+    workflow_name: str
+    workflow_description: str
+    current_values: dict = {} # Map of field -> value
+
+class AiBulkSuggestionResponse(BaseModel):
+    role: str
+    goal: str
+    backstory: str
+
+class AiTaskBulkSuggestionRequest(BaseModel):
+    task_name: str
+    agent_name: Optional[str] = None
+    workflow_name: str
+    workflow_description: str
+    current_values: dict = {}
+
+class AiTaskBulkSuggestionResponse(BaseModel):
+    description: str
+    expected_output: str

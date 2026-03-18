@@ -23,6 +23,7 @@ export interface CrewNodeData extends Record<string, unknown> {
   process: ProcessType;
   isCollapsed?: boolean;
   agentOrder?: string[];
+  inputs?: Record<string, string>;
 }
 
 export type AppNode =
@@ -182,4 +183,11 @@ export interface AppState {
   addMCPServer: (server: Omit<MCPServer, 'id'>) => void;
   updateMCPServer: (id: string, server: Partial<MCPServer>) => void;
   deleteMCPServer: (id: string) => void;
+
+  systemAiModelId: string | null;
+  fetchSettings: () => Promise<void>;
+  setSystemAiModelId: (id: string | null) => void;
+  suggestAiContent: (nodeId: string, field: 'role' | 'goal' | 'backstory' | 'description' | 'expected_output') => Promise<void>;
+  suggestBulkAiContent: (nodeId: string) => Promise<void>;
+  suggestTaskBulkAiContent: (nodeId: string) => Promise<void>;
 }

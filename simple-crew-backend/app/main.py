@@ -7,15 +7,19 @@ from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select
 from .crew_builder import run_crew_stream
 from .database import init_db, get_session
-from .models import CrewProject, User, Credential, LLMModel, MCPServer
+from .models import CrewProject, User, Credential, LLMModel, MCPServer, AppSettings
 from .schemas import (
     GraphData, ProjectCreate, ProjectRead, ProjectUpdate, 
     CredentialCreate, CredentialRead, CredentialUpdate,
     LLMModelCreate, LLMModelRead, LLMModelUpdate,
-    LLMModelCreate, LLMModelRead, LLMModelUpdate,
-    MCPServerCreate, MCPServerRead, MCPServerUpdate
+    MCPServerCreate, MCPServerRead, MCPServerUpdate,
+    AppSettingsRead, AppSettingsUpdate,
+    AiSuggestionRequest, AiSuggestionResponse,
+    AiBulkSuggestionRequest, AiBulkSuggestionResponse,
+    AiTaskBulkSuggestionRequest, AiTaskBulkSuggestionResponse
 )
 from .exporter import generate_python_project
+from .ai_service import generate_suggestion, generate_bulk_suggestion, generate_task_bulk_suggestion
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -388,3 +392,66 @@ async def delete_mcp_server(mcp_id: str, session: Session = Depends(get_session)
     session.delete(mcp)
     session.commit()
     return {"message": "Servidor MCP removido com sucesso"}
+
+# --- Settings Endpoints ---
+@app.get("/api/v1/settings", response_model=AppSettingsRead)
+async def get_settings(session: Session = Depends(get_session)):
+    settings = session.exec(select(AppSettings).where(AppSettings.user_id == ROOT_USER_ID)).first()
+    if not settings:
+        settings = AppSettings(user_id=ROOT_USER_ID)
+        session.add(settings)
+        session.commit()
+        session.refresh(settings)
+    return settings
+
+@app.patch("/api/v1/settings", response_model=AppSettingsRead)
+@app.put("/api/v1/settings", response_model=AppSettingsRead)
+async def update_settings(settings_update: AppSettingsUpdate, session: Session = Depends(get_session)):
+    db_settings = session.exec(select(AppSettings).where(AppSettings.user_id == ROOT_USER_ID)).first()
+    if not db_settings:
+        db_settings = AppSettings(user_id=ROOT_USER_ID)
+    
+    update_data = settings_update.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_settings, key, value)
+    
+    session.add(db_settings)
+    session.commit()
+    session.refresh(db_settings)
+    return db_settings
+
+# --- AI Suggestions ---
+@app.post("/api/v1/ai/suggest", response_model=AiSuggestionResponse)
+async def suggest_ai_content(request: AiSuggestionRequest):
+    suggestion = generate_suggestion(
+        field=request.field,
+        agent_name=request.agent_name,
+        workflow_name=request.workflow_name,
+        workflow_description=request.workflow_description,
+        current_value=request.current_value,
+        root_user_id=ROOT_USER_ID
+    )
+    return AiSuggestionResponse(suggestion=suggestion)
+
+@app.post("/api/v1/ai/bulk-suggest", response_model=AiBulkSuggestionResponse)
+async def suggest_bulk_ai_content(request: AiBulkSuggestionRequest):
+    result = generate_bulk_suggestion(
+        agent_name=request.agent_name,
+        workflow_name=request.workflow_name,
+        workflow_description=request.workflow_description,
+        current_values=request.current_values,
+        root_user_id=ROOT_USER_ID
+    )
+    return AiBulkSuggestionResponse(**result)
+
+@app.post("/api/v1/ai/task-bulk-suggest", response_model=AiTaskBulkSuggestionResponse)
+async def suggest_task_bulk_ai_content(request: AiTaskBulkSuggestionRequest):
+    result = generate_task_bulk_suggestion(
+        task_name=request.task_name,
+        agent_name=request.agent_name,
+        workflow_name=request.workflow_name,
+        workflow_description=request.workflow_description,
+        current_values=request.current_values,
+        root_user_id=ROOT_USER_ID
+    )
+    return AiTaskBulkSuggestionResponse(**result)

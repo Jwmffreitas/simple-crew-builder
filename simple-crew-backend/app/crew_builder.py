@@ -59,6 +59,12 @@ def run_crew_stream(graph_data: GraphData) -> Iterator[str]:
         yield json.dumps({"type": "error", "error": "O fluxo não possui um nó de Crew principal."}) + "\n"
         return
 
+    # --- 1b. Extração de Inputs para Kickoff ---
+    # Coleta inputs definidos manualmente no nó da Crew
+    execution_inputs = getattr(crew_node.data, 'inputs', {}) or {}
+    # Filtra apenas keys reais (remove os placeholders temporários do frontend)
+    execution_inputs = {k: v for k, v in execution_inputs.items() if not k.startswith('input_')}
+
     process_type = Process.sequential
     if crew_node.data.process == "hierarchical":
         process_type = Process.hierarchical
@@ -341,7 +347,9 @@ def run_crew_stream(graph_data: GraphData) -> Iterator[str]:
                 if ordered_task_ids:
                     emit_task_running(ordered_task_ids[0])
                 
-                result = crew.kickoff()
+                log_debug(f"Kicking off Crew with inputs: {execution_inputs}")
+                
+                result = crew.kickoff(inputs=execution_inputs)
                 q.put(json.dumps({"type": "final_result", "result": str(result)}) + "\n")
 
             except Exception as e:

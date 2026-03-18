@@ -106,13 +106,15 @@ const SettingsPage = () => {
     globalTools, updateToolConfig,
     customTools, addCustomTool, updateCustomTool, deleteCustomTool,
     mcpServers, addMCPServer, updateMCPServer, deleteMCPServer,
-    theme
+    theme,
+    systemAiModelId, setSystemAiModelId, fetchSettings
   } = useStore();
 
   React.useEffect(() => {
     fetchCredentials();
     fetchModels();
-  }, [fetchCredentials, fetchModels]);
+    fetchSettings();
+  }, [fetchCredentials, fetchModels, fetchSettings]);
 
   const [activeTab, setActiveTab] = useState<'credentials' | 'models' | 'tools' | 'mcp'>('credentials');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -355,7 +357,24 @@ def my_custom_tool(argument: str) -> str:
           </button>
         </nav>
 
-        <div className="p-4 border-t border-brand-border">
+        <div className="p-4 border-t border-brand-border space-y-4">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 px-1 mb-1">
+              <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
+              <span className="text-[10px] font-bold text-brand-muted uppercase tracking-wider">System AI</span>
+            </div>
+            <CustomSelect 
+              options={modelConfigs.map(m => ({ label: m.name, value: m.id }))}
+              value={systemAiModelId || ''}
+              onChange={(val) => setSystemAiModelId(val)}
+              placeholder="Select System AI..."
+              className="mt-1"
+            />
+            <p className="px-1 text-[9px] text-brand-muted leading-tight">
+              Model used for AI assistance and auto-filling inputs.
+            </p>
+          </div>
+
           <div className="bg-brand-bg rounded-xl p-4 flex flex-col items-center gap-2 text-center text-[10px] text-brand-muted">
             <ShieldCheck className="w-8 h-8 text-indigo-500 opacity-80" />
             <p>Your credentials stay on your machine (LocalStorage).</p>

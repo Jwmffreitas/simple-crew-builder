@@ -251,8 +251,18 @@ Gerado com ❤️ por **Simple Crew Builder**
         zip_file.writestr(f"{package_path}/crew.py", crew_py_content)
 
         # 8. src/{folder_name}/main.py
-        inputs_dict = {p: f"valor_para_{p}" for p in sorted(list(all_placeholders))}
-        inputs_str = json.dumps(inputs_dict, indent=8, ensure_ascii=False).replace('}', '        }')
+        # Detecta placeholders nos YAMLs
+        placeholders_from_yaml = {p: f"valor_para_{p}" for p in sorted(list(all_placeholders))}
+        
+        # Coleta inputs definidos manualmente no nó da Crew
+        manual_inputs = {}
+        if crew_node and hasattr(crew_node.data, 'inputs') and crew_node.data.inputs:
+            manual_inputs = {k: v for k, v in crew_node.data.inputs.items() if not k.startswith('input_')}
+        
+        # Merge: Inputs manuais sobrescrevem placeholders automáticos
+        final_inputs = {**placeholders_from_yaml, **manual_inputs}
+        
+        inputs_str = json.dumps(final_inputs, indent=8, ensure_ascii=False).replace('}', '        }')
         
         mcp_setup_code = ""
         mcp_import = ""
