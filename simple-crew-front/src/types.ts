@@ -137,6 +137,7 @@ export interface AppState {
   showNotification: (message: string, type: 'success' | 'error' | 'warning' | 'info') => void;
   clearNotification: () => void;
   exportProjectJson: () => void;
+  exportPythonProject: () => Promise<void>;
   loadProjectJson: (data: any) => boolean;
   executionResult: string | null;
   setExecutionResult: (result: string | null) => void;

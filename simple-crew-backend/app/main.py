@@ -1,3 +1,4 @@
+import io
 from contextlib import asynccontextmanager
 from typing import List
 from fastapi import FastAPI, HTTPException, Depends, Query
@@ -11,8 +12,10 @@ from .schemas import (
     GraphData, ProjectCreate, ProjectRead, ProjectUpdate, 
     CredentialCreate, CredentialRead, CredentialUpdate,
     LLMModelCreate, LLMModelRead, LLMModelUpdate,
+    LLMModelCreate, LLMModelRead, LLMModelUpdate,
     MCPServerCreate, MCPServerRead, MCPServerUpdate
 )
+from .exporter import generate_python_project
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -135,6 +138,90 @@ async def delete_project(project_id: str, session: Session = Depends(get_session
     session.delete(project)
     session.commit()
     return {"message": "Projeto removido com sucesso"}
+
+@app.get("/api/v1/projects/{project_id}/export-python")
+async def export_project_python(project_id: str, session: Session = Depends(get_session)):
+    project = session.get(CrewProject, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Projeto não encontrado")
+    
+    try:
+        # Reconstrói GraphData a partir do canvas_data persistido
+        graph_data = GraphData(**project.canvas_data)
+        
+        # Obtém autor do projeto (usuário vinculado)
+        author_name = "SimpleCrew"
+        author_email = "admin@simplecrew.ai"
+        if project.user:
+            author_name = project.user.name
+            author_email = project.user.email
+
+        # Coleta Servidores MCP usados pelos agentes
+        mcp_servers_data = []
+        all_mcp_ids = set()
+        
+        # Coleta LLMs usados pelos agentes
+        agent_llms_data = {}
+        unique_providers = set()
+
+        for node in graph_data.nodes:
+            if node.type == 'agent':
+                # MCP
+                mcp_ids = getattr(node.data, 'mcpServerIds', []) or []
+                for mid in mcp_ids:
+                    all_mcp_ids.add(mid)
+                
+                # LLM
+                model_id = getattr(node.data, 'modelId', None)
+                llm_config = None
+                if model_id:
+                    llm_config = session.get(LLMModel, model_id)
+                if not llm_config:
+                    llm_config = session.exec(select(LLMModel).where(LLMModel.is_default == True)).first()
+                
+                if llm_config:
+                    credential = session.get(Credential, llm_config.credential_id)
+                    provider = credential.provider.lower() if credential and credential.provider else "openai"
+                    unique_providers.add(provider)
+                    agent_llms_data[node.id] = {
+                        "model": llm_config.model_name,
+                        "provider": provider
+                    }
+        
+        if all_mcp_ids:
+            statement = select(MCPServer).where(MCPServer.id.in_(list(all_mcp_ids)))
+            mcp_records = session.exec(statement).all()
+            for rec in mcp_records:
+                mcp_servers_data.append({
+                    "id": str(rec.id),
+                    "name": rec.name,
+                    "transport_type": rec.transport_type,
+                    "command": rec.command,
+                    "args": rec.args,
+                    "env_vars": rec.env_vars
+                })
+
+        zip_bytes = generate_python_project(
+            graph_data, 
+            project.name,
+            author_name=author_name,
+            author_email=author_email,
+            mcp_servers=mcp_servers_data,
+            project_description=project.description or "",
+            agent_llms=agent_llms_data,
+            providers=list(unique_providers)
+        )
+        
+        # Nome do arquivo sanitizado para o header de download
+        filename = f"{project.name.lower().replace(' ', '_')}_crew.zip"
+        
+        return StreamingResponse(
+            io.BytesIO(zip_bytes),
+            media_type="application/x-zip-compressed",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao gerar exportação: {str(e)}")
 
 # --- CRUD de Credenciais ---
 

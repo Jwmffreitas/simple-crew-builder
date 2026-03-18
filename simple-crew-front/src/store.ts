@@ -311,6 +311,51 @@ export const useStore = create<AppState>((set, get) => ({
 
     state.showNotification("Project exported successfully!", "success");
   },
+
+  exportPythonProject: async () => {
+    const state = get();
+    if (!state.currentProjectId) {
+      // Se não tem ID, salva primeiro para garantir que o backend tenha os dados
+      toast.error("Please save the project before exporting to Python.");
+      return;
+    }
+
+    if (!state.validateGraph()) {
+      state.showNotification("Cannot export. Please fix the highlighted errors first.", "error");
+      return;
+    }
+
+    try {
+      state.showNotification("Preparing Python project... ⏳", "info");
+      
+      const response = await fetch(`http://localhost:8000/api/v1/projects/${state.currentProjectId}/export-python`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to generate Python project');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      
+      // Tenta pegar o nome do projeto salvo
+      const project = state.savedProjects.find(p => p.id === state.currentProjectId);
+      const filename = project ? `${project.name.toLowerCase().replace(/ /g, '_')}_crew.zip` : 'simple-crew-python.zip';
+      
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      state.showNotification("Python project downloaded! 🚀", "success");
+    } catch (error: any) {
+      console.error(error);
+      state.showNotification(`Export failed: ${error.message}`, "error");
+    }
+  },
+
   loadProjectJson: (data) => {
     try {
       if (!data || !Array.isArray(data.nodes) || !Array.isArray(data.edges)) {

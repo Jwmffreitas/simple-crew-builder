@@ -47,12 +47,17 @@ export function ExportDropdown() {
             </div>
           </button>
 
-          <button className="w-full flex items-center justify-between px-4 py-2.5 text-sm text-slate-400 dark:text-slate-500 cursor-not-allowed group opacity-60">
+          <button
+            onClick={() => {
+              useStore.getState().exportPythonProject();
+              setIsOpen(false);
+            }}
+            className="w-full flex items-center justify-between px-4 py-2.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors group"
+          >
             <div className="flex items-center gap-3">
-              <Code className="w-4 h-4" />
-              <span className="font-medium">Python Script</span>
+              <Code className="w-4 h-4 text-slate-400 group-hover:text-indigo-500 transition-colors" />
+              <span className="font-medium">Python Project</span>
             </div>
-            <span className="text-[9px] font-bold bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-slate-400 dark:text-slate-600 uppercase">Coming Soon</span>
           </button>
 
           <button className="w-full flex items-center justify-between px-4 py-2.5 text-sm text-slate-400 dark:text-slate-500 cursor-not-allowed group opacity-60">
