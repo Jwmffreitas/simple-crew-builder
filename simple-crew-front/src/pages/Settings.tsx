@@ -16,7 +16,6 @@ import {
   Copy,
   Wrench,
   Server,
-  ToggleLeft as Toggle,
   Settings2,
   PlusCircle,
   Hash,
@@ -30,7 +29,8 @@ import {
   FileCode
 } from 'lucide-react';
 import { useStore } from '../store';
-import { type ModelConfig, type ToolConfig, type MCPServer, type CustomTool } from '../types';
+import { HighlightedTextField } from '../components/HighlightedTextField';
+import { type ModelConfig, type MCPServer, type CustomTool } from '../types';
 
 interface CustomSelectProps {
   options: { label: string; value: string }[];
@@ -106,13 +106,14 @@ const SettingsPage = () => {
     globalTools, updateToolConfig,
     customTools, addCustomTool, updateCustomTool, deleteCustomTool,
     mcpServers, addMCPServer, updateMCPServer, deleteMCPServer,
-    theme
+    systemAiModelId, setSystemAiModelId, fetchSettings
   } = useStore();
 
   React.useEffect(() => {
     fetchCredentials();
     fetchModels();
-  }, [fetchCredentials, fetchModels]);
+    fetchSettings();
+  }, [fetchCredentials, fetchModels, fetchSettings]);
 
   const [activeTab, setActiveTab] = useState<'credentials' | 'models' | 'tools' | 'mcp'>('credentials');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -177,10 +178,10 @@ const SettingsPage = () => {
       // Limpa valores vazios para serem nulos no backend
       const modelToSave = {
         ...newModel,
-        baseUrl: newModel.baseUrl === '' ? undefined : newModel.baseUrl,
-        temperature: newModel.temperature === undefined || isNaN(newModel.temperature) ? undefined : newModel.temperature,
-        maxTokens: newModel.maxTokens === undefined || isNaN(newModel.maxTokens) ? undefined : newModel.maxTokens,
-        maxCompletionTokens: newModel.maxCompletionTokens === undefined || isNaN(newModel.maxCompletionTokens) ? undefined : newModel.maxCompletionTokens,
+        baseUrl: newModel.baseUrl === '' ? null : newModel.baseUrl,
+        temperature: (newModel.temperature === undefined || newModel.temperature === null || isNaN(newModel.temperature)) ? null : newModel.temperature,
+        maxTokens: (newModel.maxTokens === undefined || newModel.maxTokens === null || isNaN(newModel.maxTokens)) ? null : newModel.maxTokens,
+        maxCompletionTokens: (newModel.maxCompletionTokens === undefined || newModel.maxCompletionTokens === null || isNaN(newModel.maxCompletionTokens)) ? null : newModel.maxCompletionTokens,
       };
 
       if (editingModelId) {
@@ -264,10 +265,7 @@ const SettingsPage = () => {
   };
 
 
-  const pythonBoilerplate = `from crewai.tools import tool
-
-@tool("Tool Name")
-def my_custom_tool(argument: str) -> str:
+  const pythonBoilerplate = `def my_custom_tool(argument: str) -> str:
     """Description of what this tool does."""
     # Your python code here
     return "Success"`;
@@ -355,7 +353,24 @@ def my_custom_tool(argument: str) -> str:
           </button>
         </nav>
 
-        <div className="p-4 border-t border-brand-border">
+        <div className="p-4 border-t border-brand-border space-y-4">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 px-1 mb-1">
+              <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
+              <span className="text-[10px] font-bold text-brand-muted uppercase tracking-wider">System AI</span>
+            </div>
+            <CustomSelect 
+              options={modelConfigs.map(m => ({ label: m.name, value: m.id }))}
+              value={systemAiModelId || ''}
+              onChange={(val) => setSystemAiModelId(val)}
+              placeholder="Select System AI..."
+              className="mt-1"
+            />
+            <p className="px-1 text-[9px] text-brand-muted leading-tight">
+              Model used for AI assistance and auto-filling inputs.
+            </p>
+          </div>
+
           <div className="bg-brand-bg rounded-xl p-4 flex flex-col items-center gap-2 text-center text-[10px] text-brand-muted">
             <ShieldCheck className="w-8 h-8 text-indigo-500 opacity-80" />
             <p>Your credentials stay on your machine (LocalStorage).</p>
@@ -970,9 +985,9 @@ def my_custom_tool(argument: str) -> str:
                     value={newModel.temperature ?? 0.7}
                     onChange={(e) => setNewModel({...newModel, temperature: parseFloat(e.target.value)})}
                   />
-                  {newModel.temperature !== undefined && (
+                  {newModel.temperature !== undefined && newModel.temperature !== null && (
                     <button 
-                      onClick={() => setNewModel({...newModel, temperature: undefined})}
+                      onClick={() => setNewModel({...newModel, temperature: null})}
                       className="mt-2 text-[10px] uppercase font-bold text-slate-400 hover:text-red-500 transition-colors"
                     >
                       Reset
@@ -988,7 +1003,7 @@ def my_custom_tool(argument: str) -> str:
                   placeholder="Provider Default"
                   className="w-full bg-brand-bg border border-brand-border rounded-xl px-4 py-3 text-brand-text outline-none focus:ring-2 focus:ring-indigo-600 transition-all text-sm"
                   value={newModel.maxTokens ?? ''}
-                  onChange={(e) => setNewModel({...newModel, maxTokens: e.target.value === '' ? undefined : parseInt(e.target.value)})}
+                  onChange={(e) => setNewModel({...newModel, maxTokens: e.target.value === '' ? null : parseInt(e.target.value)})}
                 />
               </div>
 
@@ -999,7 +1014,7 @@ def my_custom_tool(argument: str) -> str:
                   placeholder="Provider Default"
                   className="w-full bg-brand-bg border border-brand-border rounded-xl px-4 py-3 text-brand-text outline-none focus:ring-2 focus:ring-indigo-600 transition-all text-sm"
                   value={newModel.maxCompletionTokens ?? ''}
-                  onChange={(e) => setNewModel({...newModel, maxCompletionTokens: e.target.value === '' ? undefined : parseInt(e.target.value)})}
+                  onChange={(e) => setNewModel({...newModel, maxCompletionTokens: e.target.value === '' ? null : parseInt(e.target.value)})}
                 />
               </div>
 
@@ -1317,16 +1332,16 @@ def my_custom_tool(argument: str) -> str:
                   <span>Python Script (CrewAI @tool pattern)</span>
                   <span className="text-[10px] text-brand-muted">Uses Python 3.12</span>
                 </label>
-                <div className={`relative rounded-2xl overflow-hidden border border-brand-border bg-slate-950 p-1`}>
-                  <div className="absolute top-0 right-0 p-3 pointer-events-none opacity-40">
+                <div className="relative group">
+                  <div className="absolute top-0 right-0 p-4 pointer-events-none opacity-20 z-20 group-hover:opacity-40 transition-opacity">
                     <FileCode className="w-8 h-8 text-emerald-500" />
                   </div>
-                  <textarea 
-                    placeholder="# Write your python code here..."
-                    className="w-full bg-transparent p-6 text-emerald-400 font-mono text-sm min-h-[300px] outline-none resize-none spellcheck-false"
-                    style={{ 
-                      lineHeight: '1.6'
-                    }}
+                  <HighlightedTextField
+                    type="textarea"
+                    language="python"
+                    placeholder="def my_tool(arg: str): ..."
+                    className="min-h-[450px]"
+                    rows={15}
                     value={newCustomTool.code}
                     onChange={(e) => setNewCustomTool({...newCustomTool, code: e.target.value})}
                   />

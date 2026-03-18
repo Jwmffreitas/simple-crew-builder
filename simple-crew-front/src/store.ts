@@ -146,8 +146,53 @@ export const useStore = create<AppState>((set, get) => ({
     { id: 'scrape', name: 'Website Scraper', description: 'Extract clean content from any website URL.', isEnabled: false, requiresKey: false },
     { id: 'file_read', name: 'File System Reader', description: 'Read local files from the workspace.', isEnabled: true, requiresKey: false },
   ])),
-  customTools: JSON.parse(localStorage.getItem('custom_tools') || '[]'),
-  mcpServers: JSON.parse(localStorage.getItem('mcp_servers') || '[]'),
+  customTools: [],
+  mcpServers: [], // Will be fetched from backend
+  systemAiModelId: null,
+
+  fetchSettings: async () => {
+    try {
+      const response = await fetch('http://localhost:8000/api/v1/settings');
+      if (!response.ok) throw new Error('Failed to fetch settings');
+      const settings = await response.json();
+      set({ systemAiModelId: settings.system_ai_model_id });
+    } catch (error) {
+      console.error(error);
+    }
+  },
+
+  fetchMCPServers: async () => {
+    try {
+      const response = await fetch('http://localhost:8000/api/v1/mcp-servers');
+      if (!response.ok) throw new Error('Failed to fetch MCP servers');
+      const servers = await response.json();
+      // Map backend snake_case to frontend camelCase
+      const mappedServers = servers.map((s: any) => ({
+        id: s.id,
+        name: s.name,
+        transportType: s.transport_type,
+        command: s.command,
+        args: s.args,
+        envVars: s.env_vars,
+        url: s.url,
+        headers: s.headers
+      }));
+      set({ mcpServers: mappedServers });
+    } catch (error) {
+      console.error(error);
+    }
+  },
+
+  fetchCustomTools: async () => {
+    try {
+      const response = await fetch('http://localhost:8000/api/v1/custom-tools');
+      if (!response.ok) throw new Error('Failed to fetch custom tools');
+      const tools = await response.json();
+      set({ customTools: tools });
+    } catch (error) {
+      console.error(error);
+    }
+  },
 
   setIsSettingsOpen: (open) => set({ isSettingsOpen: open }),
   toggleTheme: () => {
@@ -166,54 +211,109 @@ export const useStore = create<AppState>((set, get) => ({
     });
   },
 
-  addCustomTool: (tool) => {
-    set((state) => {
-      const newTool = { ...tool, id: crypto.randomUUID() };
-      const newTools = [...state.customTools, newTool];
-      localStorage.setItem('custom_tools', JSON.stringify(newTools));
-      return { customTools: newTools };
-    });
+  addCustomTool: async (tool) => {
+    try {
+      const response = await fetch('http://localhost:8000/api/v1/custom-tools', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(tool)
+      });
+      if (!response.ok) throw new Error('Failed to add custom tool');
+      await get().fetchCustomTools();
+      toast.success('Custom Tool added!');
+    } catch (error: any) {
+      toast.error(error.message);
+    }
   },
 
-  updateCustomTool: (id, config) => {
-    set((state) => {
-      const newTools = state.customTools.map(t => t.id === id ? { ...t, ...config } : t);
-      localStorage.setItem('custom_tools', JSON.stringify(newTools));
-      return { customTools: newTools };
-    });
+  updateCustomTool: async (id, config) => {
+    try {
+      const response = await fetch(`http://localhost:8000/api/v1/custom-tools/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config)
+      });
+      if (!response.ok) throw new Error('Failed to update custom tool');
+      await get().fetchCustomTools();
+      toast.success('Custom Tool updated!');
+    } catch (error: any) {
+      toast.error(error.message);
+    }
   },
 
-  deleteCustomTool: (id) => {
-    set((state) => {
-      const newTools = state.customTools.filter(t => t.id !== id);
-      localStorage.setItem('custom_tools', JSON.stringify(newTools));
-      return { customTools: newTools };
-    });
+  deleteCustomTool: async (id) => {
+    try {
+      const response = await fetch(`http://localhost:8000/api/v1/custom-tools/${id}`, {
+        method: 'DELETE'
+      });
+      if (!response.ok) throw new Error('Failed to delete custom tool');
+      await get().fetchCustomTools();
+      toast.success('Custom Tool removed.');
+    } catch (error: any) {
+      toast.error(error.message);
+    }
   },
 
-  addMCPServer: (server) => {
-    set((state) => {
-      const newServer = { ...server, id: crypto.randomUUID() };
-      const newServers = [...state.mcpServers, newServer];
-      localStorage.setItem('mcp_servers', JSON.stringify(newServers));
-      return { mcpServers: newServers };
-    });
+  addMCPServer: async (server) => {
+    try {
+      const payload = {
+        name: server.name,
+        transport_type: server.transportType,
+        command: server.command,
+        args: server.args,
+        env_vars: server.envVars,
+        url: server.url,
+        headers: server.headers
+      };
+      const response = await fetch('http://localhost:8000/api/v1/mcp-servers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!response.ok) throw new Error('Failed to add MCP server');
+      await get().fetchMCPServers();
+      toast.success('MCP Server added!');
+    } catch (error: any) {
+      toast.error(error.message);
+    }
   },
 
-  updateMCPServer: (id, config) => {
-    set((state) => {
-      const newServers = state.mcpServers.map(s => s.id === id ? { ...s, ...config } : s);
-      localStorage.setItem('mcp_servers', JSON.stringify(newServers));
-      return { mcpServers: newServers };
-    });
+
+  updateMCPServer: async (id, config) => {
+    try {
+      const payload: any = {};
+      if (config.name !== undefined) payload.name = config.name;
+      if (config.transportType !== undefined) payload.transport_type = config.transportType;
+      if (config.command !== undefined) payload.command = config.command;
+      if (config.args !== undefined) payload.args = config.args;
+      if (config.envVars !== undefined) payload.env_vars = config.envVars;
+      if (config.url !== undefined) payload.url = config.url;
+      if (config.headers !== undefined) payload.headers = config.headers;
+
+      const response = await fetch(`http://localhost:8000/api/v1/mcp-servers/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!response.ok) throw new Error('Failed to update MCP server');
+      await get().fetchMCPServers();
+      toast.success('MCP Server updated!');
+    } catch (error: any) {
+      toast.error(error.message);
+    }
   },
 
-  deleteMCPServer: (id) => {
-    set((state) => {
-      const newServers = state.mcpServers.filter(s => s.id !== id);
-      localStorage.setItem('mcp_servers', JSON.stringify(newServers));
-      return { mcpServers: newServers };
-    });
+  deleteMCPServer: async (id) => {
+    try {
+      const response = await fetch(`http://localhost:8000/api/v1/mcp-servers/${id}`, {
+        method: 'DELETE'
+      });
+      if (!response.ok) throw new Error('Failed to delete MCP server');
+      await get().fetchMCPServers();
+      toast.success('MCP Server removed.');
+    } catch (error: any) {
+      toast.error(error.message);
+    }
   },
   setExecutionResult: (result) => set({ executionResult: result }),
   showNotification: (message, type) => {
@@ -253,6 +353,51 @@ export const useStore = create<AppState>((set, get) => ({
 
     state.showNotification("Project exported successfully!", "success");
   },
+
+  exportPythonProject: async () => {
+    const state = get();
+    if (!state.currentProjectId) {
+      // Se não tem ID, salva primeiro para garantir que o backend tenha os dados
+      toast.error("Please save the project before exporting to Python.");
+      return;
+    }
+
+    if (!state.validateGraph()) {
+      state.showNotification("Cannot export. Please fix the highlighted errors first.", "error");
+      return;
+    }
+
+    try {
+      state.showNotification("Preparing Python project... ⏳", "info");
+      
+      const response = await fetch(`http://localhost:8000/api/v1/projects/${state.currentProjectId}/export-python`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to generate Python project');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      
+      // Tenta pegar o nome do projeto salvo
+      const project = state.savedProjects.find(p => p.id === state.currentProjectId);
+      const filename = project ? `${project.name.toLowerCase().replace(/ /g, '_')}_crew.zip` : 'simple-crew-python.zip';
+      
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      state.showNotification("Python project downloaded! 🚀", "success");
+    } catch (error: any) {
+      console.error(error);
+      state.showNotification(`Export failed: ${error.message}`, "error");
+    }
+  },
+
   loadProjectJson: (data) => {
     try {
       if (!data || !Array.isArray(data.nodes) || !Array.isArray(data.edges)) {
@@ -612,6 +757,7 @@ export const useStore = create<AppState>((set, get) => ({
         canvas_data: {
           nodes: state.nodes,
           edges: state.edges,
+          customTools: state.customTools,
           version: "1.0"
         }
       };
@@ -1045,4 +1191,136 @@ export const useStore = create<AppState>((set, get) => ({
     localStorage.setItem('default_model', model);
     set({ defaultModel: model });
   },
+
+  setSystemAiModelId: async (id: string | null) => {
+    try {
+      const response = await fetch('http://localhost:8000/api/v1/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ system_ai_model_id: id })
+      });
+      if (!response.ok) throw new Error('Failed to update settings');
+      const settings = await response.json();
+      set({ systemAiModelId: settings.system_ai_model_id });
+      toast.success('System AI updated!');
+    } catch (error: any) {
+      toast.error(error.message);
+    }
+  },
+
+  suggestAiContent: async (nodeId, field) => {
+    const { nodes, updateNodeData } = get();
+    const agentNode = nodes.find(n => n.id === nodeId);
+    if (!agentNode) return null;
+
+    const crewNode = nodes.find(n => n.type === 'crew');
+    const workflowName = (crewNode?.data as any)?.name || 'SimpleCrew Workflow';
+    const workflowDescription = (crewNode?.data as any)?.description || '';
+
+    try {
+      const response = await fetch('http://localhost:8000/api/v1/ai/suggest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          field,
+          agent_name: (agentNode.data as any).name,
+          workflow_name: workflowName,
+          workflow_description: workflowDescription,
+          current_value: (agentNode.data as any)[field]
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to get AI suggestion');
+      const data = await response.json();
+      
+      updateNodeData(nodeId, { [field]: data.suggestion });
+      return data.suggestion;
+    } catch (error: any) {
+      toast.error(`AI Error: ${error.message}`);
+      return null;
+    }
+  },
+
+  suggestBulkAiContent: async (nodeId) => {
+    const { nodes, updateNodeData } = get();
+    const agentNode = nodes.find(n => n.id === nodeId);
+    if (!agentNode) return;
+
+    const crewNode = nodes.find(n => n.type === 'crew');
+    const workflowName = (crewNode?.data as any)?.name || 'SimpleCrew Workflow';
+    const workflowDescription = (crewNode?.data as any)?.description || '';
+
+    try {
+      const response = await fetch('http://localhost:8000/api/v1/ai/bulk-suggest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agent_name: (agentNode.data as any).name,
+          workflow_name: workflowName,
+          workflow_description: workflowDescription,
+          current_values: {
+            role: (agentNode.data as any).role,
+            goal: (agentNode.data as any).goal,
+            backstory: (agentNode.data as any).backstory
+          }
+        })
+      });
+
+      if (!response.ok) throw new Error('AI Bulk Suggestion failed');
+      const data = await response.json();
+      
+      updateNodeData(nodeId, {
+        role: data.role,
+        goal: data.goal,
+        backstory: data.backstory
+      });
+      
+      toast.success('Agent details generated! ✨');
+    } catch (error: any) {
+      toast.error(error.message);
+    }
+  },
+
+  suggestTaskBulkAiContent: async (nodeId) => {
+    const { nodes, updateNodeData } = get();
+    const taskNode = nodes.find(n => n.id === nodeId);
+    if (!taskNode) return;
+
+    const crewNode = nodes.find(n => n.type === 'crew');
+    const workflowName = (crewNode?.data as any)?.name || 'SimpleCrew Workflow';
+    const workflowDescription = (crewNode?.data as any)?.description || '';
+
+    // Find assigned agent name if any
+    const agentNode = nodes.find(n => n.type === 'agent' && (n.data as any).taskIds?.includes(nodeId));
+    const agentName = (agentNode?.data as any)?.name;
+
+    try {
+      const response = await fetch('http://localhost:8000/api/v1/ai/task-bulk-suggest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          task_name: (taskNode.data as any).name || 'Unnamed Task',
+          agent_name: agentName,
+          workflow_name: workflowName,
+          workflow_description: workflowDescription,
+          current_values: {
+            description: (taskNode.data as any).description,
+            expected_output: (taskNode.data as any).expected_output
+          }
+        })
+      });
+
+      if (!response.ok) throw new Error('AI Task Suggestion failed');
+      const data = await response.json();
+      
+      updateNodeData(nodeId, {
+        description: data.description,
+        expected_output: data.expected_output
+      });
+      
+      toast.success('Task details generated! ✨');
+    } catch (error: any) {
+      toast.error(error.message);
+    }
+  }
 }));

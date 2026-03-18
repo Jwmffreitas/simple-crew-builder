@@ -9,18 +9,23 @@ export interface AgentNodeData extends Record<string, unknown> {
   backstory: string;
   isCollapsed?: boolean;
   modelId?: string;
+  mcpServerIds?: string[];
+  customToolIds?: string[];
 }
 
 export interface TaskNodeData extends Record<string, unknown> {
   name: string;
   description: string;
   expected_output: string;
+  context?: string[];
+  customToolIds?: string[];
 }
 
 export interface CrewNodeData extends Record<string, unknown> {
   process: ProcessType;
   isCollapsed?: boolean;
   agentOrder?: string[];
+  inputs?: Record<string, string>;
 }
 
 export type AppNode =
@@ -66,10 +71,10 @@ export interface ModelConfig {
   model_name: string;
   description?: string;
   credentialId: string;
-  baseUrl?: string;
-  temperature?: number;
-  maxTokens?: number;
-  maxCompletionTokens?: number;
+  baseUrl?: string | null;
+  temperature?: number | null;
+  maxTokens?: number | null;
+  maxCompletionTokens?: number | null;
   isDefault: boolean;
 }
 
@@ -135,6 +140,7 @@ export interface AppState {
   showNotification: (message: string, type: 'success' | 'error' | 'warning' | 'info') => void;
   clearNotification: () => void;
   exportProjectJson: () => void;
+  exportPythonProject: () => Promise<void>;
   loadProjectJson: (data: any) => boolean;
   executionResult: string | null;
   setExecutionResult: (result: string | null) => void;
@@ -170,12 +176,21 @@ export interface AppState {
   updateToolConfig: (id: string, config: Partial<ToolConfig>) => void;
   
   customTools: CustomTool[];
-  addCustomTool: (tool: Omit<CustomTool, 'id'>) => void;
-  updateCustomTool: (id: string, tool: Partial<CustomTool>) => void;
-  deleteCustomTool: (id: string) => void;
+  fetchCustomTools: () => Promise<void>;
+  addCustomTool: (tool: Omit<CustomTool, 'id'>) => Promise<void>;
+  updateCustomTool: (id: string, tool: Partial<CustomTool>) => Promise<void>;
+  deleteCustomTool: (id: string) => Promise<void>;
 
   mcpServers: MCPServer[];
+  fetchMCPServers: () => Promise<void>;
   addMCPServer: (server: Omit<MCPServer, 'id'>) => void;
   updateMCPServer: (id: string, server: Partial<MCPServer>) => void;
   deleteMCPServer: (id: string) => void;
+
+  systemAiModelId: string | null;
+  fetchSettings: () => Promise<void>;
+  setSystemAiModelId: (id: string | null) => void;
+  suggestAiContent: (nodeId: string, field: 'role' | 'goal' | 'backstory' | 'description' | 'expected_output') => Promise<void>;
+  suggestBulkAiContent: (nodeId: string) => Promise<void>;
+  suggestTaskBulkAiContent: (nodeId: string) => Promise<void>;
 }

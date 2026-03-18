@@ -2,7 +2,7 @@ import os
 import uuid
 from sqlmodel import create_engine, SQLModel, Session, select
 from dotenv import load_dotenv
-from .models import User, CrewProject, Credential, LLMModel
+from .models import User, CrewProject, Credential, LLMModel, AppSettings
 
 load_dotenv()
 
@@ -27,6 +27,14 @@ def init_db():
             session.add(root_user)
             session.commit()
             print("--- Seed: Root User 'Gleison Souza' created! ---")
+        
+        # Seed Settings
+        settings = session.exec(select(AppSettings).where(AppSettings.user_id == root_user.id)).first()
+        if not settings:
+            settings = AppSettings(user_id=root_user.id)
+            session.add(settings)
+            session.commit()
+            print("--- Seed: Default AppSettings created! ---")
 
 def get_session():
     with Session(engine) as session:

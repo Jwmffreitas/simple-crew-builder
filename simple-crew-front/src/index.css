@@ -94,3 +94,99 @@ body,
     stroke-dashoffset: 0;
   }
 }
+
+@keyframes sparkle-shimmer {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+    filter: drop-shadow(0 0 0px rgba(251, 191, 36, 0));
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.2);
+    filter: drop-shadow(0 0 8px rgba(251, 191, 36, 0.8));
+    color: #fbbf24; /* amber-400 */
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    filter: drop-shadow(0 0 0px rgba(251, 191, 36, 0));
+  }
+}
+
+.animate-sparkle-shimmer {
+  animation: sparkle-shimmer 1.5s ease-in-out infinite;
+}
+
+/* --- Standardized Custom Scrollbar --- */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--text-muted);
+  border-radius: 10px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+  opacity: 0.5;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: var(--border-main);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-primary) !important;
+  background-clip: content-box;
+}
+
+/* Firefox Support */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-main) transparent;
+}
+
+/* Prism.js Dark Theme for Custom Tool Editor */
+code[class*="language-"],
+pre[class*="language-"] {
+  color: #e2e8f0;
+  background: none;
+  font-family: inherit;
+  text-align: left;
+  white-space: pre;
+  word-spacing: normal;
+  word-break: normal;
+  word-wrap: normal;
+  line-height: 1.5;
+  tab-size: 4;
+  hyphens: none;
+}
+
+.token.comment, .token.prolog, .token.doctype, .token.cdata { color: #64748b; font-style: italic; }
+.token.punctuation { color: #94a3b8; }
+.token.property, .token.tag, .token.boolean, .token.number, .token.constant, .token.symbol, .token.deleted { color: #f97316; }
+.token.selector, .token.attr-name, .token.string, .token.char, .token.builtin, .token.inserted { color: #fbbf24; }
+.token.operator, .token.entity, .token.url, .language-css .token.string, .style .token.string { color: #94a3b8; }
+.token.atrule, .token.attr-value, .token.keyword { color: #c084fc; font-weight: 500; }
+.token.function, .token.class-name { color: #38bdf8; }
+.token.regex, .token.important, .token.variable { color: #fbbf24; }
+.token.important, .token.bold { font-weight: bold; }
+.token.italic { font-style: italic; }
+.token.entity { cursor: help; }
+
+/* Custom Tool Editor Specific styles */
+.code-editor-wrapper {
+  font-family: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace !important;
+}
+
+.code-editor-textarea {
+  outline: none !important;
+  font-family: inherit !important;
+}
