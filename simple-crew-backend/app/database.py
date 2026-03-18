@@ -2,7 +2,7 @@ import os
 import uuid
 from sqlmodel import create_engine, SQLModel, Session, select
 from dotenv import load_dotenv
-from .models import User, CrewProject, Credential, LLMModel, AppSettings
+from .models import User, CrewProject, Credential, LLMModel, AppSettings, CustomTool, Workspace
 
 load_dotenv()
 

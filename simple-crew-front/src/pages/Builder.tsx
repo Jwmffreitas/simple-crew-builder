@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useMemo, useEffect } from 'react';
+import React, { useCallback, useRef, useEffect } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { ReactFlow, Background, Controls, MiniMap, ReactFlowProvider, useReactFlow, BackgroundVariant } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -100,7 +100,7 @@ function FlowBuilder() {
   const { 
     isExecuting, startRealExecution, executionResult, setIsConsoleExpanded, setIsConsoleOpen, 
     loadProject, saveProject, currentProjectId, isSaving, resetProject, validateGraph, 
-    showNotification, updateProjectMetadata, savedProjects
+    showNotification, updateProjectMetadata, currentProjectName, currentProjectDescription
   } = useStore(
     useShallow((state) => ({
       isExecuting: state.isExecuting,
@@ -116,7 +116,8 @@ function FlowBuilder() {
       validateGraph: state.validateGraph,
       showNotification: state.showNotification,
       updateProjectMetadata: state.updateProjectMetadata,
-      savedProjects: state.savedProjects
+      currentProjectName: state.currentProjectName,
+      currentProjectDescription: state.currentProjectDescription
     }))
   );
 
@@ -137,17 +138,15 @@ function FlowBuilder() {
   const [isEditingTitle, setIsEditingTitle] = React.useState(false);
   const [editedTitle, setEditedTitle] = React.useState('');
   
-  const currentProject = useMemo(() => savedProjects.find(p => p.id === id), [savedProjects, id]);
-
   useEffect(() => {
-    if (currentProject) {
-      setEditedTitle(currentProject.name);
+    if (currentProjectName) {
+      setEditedTitle(currentProjectName);
     }
-  }, [currentProject]);
+  }, [currentProjectName]);
 
   const handleTitleSave = async () => {
-    if (id && id !== 'new' && editedTitle !== currentProject?.name) {
-      await updateProjectMetadata(id, editedTitle, currentProject?.description || '');
+    if (id && id !== 'new' && editedTitle !== currentProjectName) {
+      await updateProjectMetadata(id, editedTitle, currentProjectDescription || '');
     }
     setIsEditingTitle(false);
   };
@@ -191,7 +190,7 @@ function FlowBuilder() {
                     onClick={() => id !== 'new' && setIsEditingTitle(true)}
                     className={`text-xl font-bold text-brand-text tracking-tight ${id !== 'new' ? 'cursor-pointer hover:text-indigo-500 border-b border-transparent hover:border-indigo-500/30' : ''}`}
                   >
-                    {currentProject?.name || 'SimpleCrew'}
+                    {currentProjectName || 'SimpleCrew'}
                   </h1>
                 )}
                 <span className="text-brand-muted font-normal text-xl">Builder</span>
@@ -226,7 +225,7 @@ function FlowBuilder() {
 
           <button
             onClick={() => {
-              saveProject(editedTitle, currentProject?.description);
+              saveProject(editedTitle, currentProjectDescription || '');
             }}
             disabled={isSaving}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-sm ${isSaving

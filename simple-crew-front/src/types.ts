@@ -11,6 +11,7 @@ export interface AgentNodeData extends Record<string, unknown> {
   modelId?: string;
   mcpServerIds?: string[];
   customToolIds?: string[];
+  globalToolIds?: string[];
 }
 
 export interface TaskNodeData extends Record<string, unknown> {
@@ -19,6 +20,7 @@ export interface TaskNodeData extends Record<string, unknown> {
   expected_output: string;
   context?: string[];
   customToolIds?: string[];
+  globalToolIds?: string[];
 }
 
 export interface CrewNodeData extends Record<string, unknown> {
@@ -85,6 +87,7 @@ export interface ToolConfig {
   isEnabled: boolean;
   apiKey?: string;
   requiresKey: boolean;
+  category?: string;
 }
 
 export interface CustomTool {
@@ -107,6 +110,12 @@ export interface MCPServer {
   headers?: Record<string, string>;
 }
 
+export interface Workspace {
+  id: string;
+  name: string;
+  path: string;
+}
+
 export interface AppState {
   nodes: AppNode[];
   edges: AppEdge[];
@@ -115,6 +124,8 @@ export interface AppState {
   isSaving: boolean;
   savedProjects: Project[];
   currentProjectId: string | null;
+  currentProjectName: string | null;
+  currentProjectDescription: string | null;
   nodeStatuses: Record<string, NodeStatus>;
   onNodesChange: (changes: any) => void;
   onEdgesChange: (changes: any) => void;
@@ -188,8 +199,16 @@ export interface AppState {
   deleteMCPServer: (id: string) => void;
 
   systemAiModelId: string | null;
+  activeWorkspaceId: string | null;
+  workspaces: Workspace[];
+  fetchWorkspaces: () => Promise<void>;
+  addWorkspace: (workspace: Omit<Workspace, 'id'>) => Promise<void>;
+  updateWorkspace: (id: string, workspace: Partial<Workspace>) => Promise<void>;
+  deleteWorkspace: (id: string) => Promise<void>;
+  
   fetchSettings: () => Promise<void>;
   setSystemAiModelId: (id: string | null) => void;
+  setActiveWorkspaceId: (id: string | null) => void;
   suggestAiContent: (nodeId: string, field: 'role' | 'goal' | 'backstory' | 'description' | 'expected_output') => Promise<void>;
   suggestBulkAiContent: (nodeId: string) => Promise<void>;
   suggestTaskBulkAiContent: (nodeId: string) => Promise<void>;

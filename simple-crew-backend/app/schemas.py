@@ -19,6 +19,7 @@ class NodeData(BaseModel):
     context: Optional[List[str]] = None
     mcpServerIds: Optional[List[str]] = None
     customToolIds: Optional[List[str]] = None
+    globalToolIds: Optional[List[str]] = None
     # Permitir chaves adicionais como isCollapsed de forma crua, caso necessite depois
     class Config:
         extra = "allow"
@@ -37,11 +38,21 @@ class Edge(BaseModel):
     sourceHandle: Optional[str] = None
     targetHandle: Optional[str] = None
 
+class ToolConfig(BaseModel):
+    id: str
+    name: str
+    description: str
+    isEnabled: bool
+    apiKey: Optional[str] = None
+    requiresKey: bool
+    category: Optional[str] = None
+
 class GraphData(BaseModel):
     version: Optional[str] = "1.0"
     nodes: List[Node]
     edges: List[Edge]
     customTools: Optional[List[CustomTool]] = []
+    globalTools: Optional[List[ToolConfig]] = []
 
 # Schemas para CRUD de Projetos (Sprint 38)
 class ProjectBase(BaseModel):
@@ -201,9 +212,30 @@ class CustomToolUpdate(BaseModel):
     description: Optional[str] = None
     code: Optional[str] = None
 
+# Schemas para Gerenciamento de Workspaces
+class WorkspaceBase(BaseModel):
+    name: str
+    path: str
+
+class WorkspaceCreate(WorkspaceBase):
+    pass
+
+class WorkspaceRead(WorkspaceBase):
+    id: Any # UUID
+    created_at: Any
+    updated_at: Any
+
+    class Config:
+        from_attributes = True
+
+class WorkspaceUpdate(BaseModel):
+    name: Optional[str] = None
+    path: Optional[str] = None
+
 # Schemas para Configurações do App
 class AppSettingsBase(BaseModel):
     system_ai_model_id: Optional[Any] = None
+    active_workspace_id: Optional[Any] = None
 
 class AppSettingsRead(AppSettingsBase):
     user_id: Any
@@ -213,6 +245,7 @@ class AppSettingsRead(AppSettingsBase):
 
 class AppSettingsUpdate(BaseModel):
     system_ai_model_id: Optional[Any] = None
+    active_workspace_id: Optional[Any] = None
 
 # Sugestões de IA
 class AiSuggestionRequest(BaseModel):

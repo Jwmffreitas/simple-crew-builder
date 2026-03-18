@@ -6,7 +6,7 @@ import { useStore } from '../store';
 import type { AgentNodeData, NodeStatus } from '../types';
 
 export const AgentNode = memo(({ id, data }: NodeProps<Node<AgentNodeData, 'agent'>>) => {
-  const { deleteNode, toggleCollapse, updateNodeData, nodes, onConnect, setActiveNode, mcpServers, customTools } = useStore(
+  const { deleteNode, toggleCollapse, updateNodeData, nodes, onConnect, setActiveNode, mcpServers, customTools, globalTools } = useStore(
     useShallow((state) => ({
       deleteNode: state.deleteNode,
       toggleCollapse: state.toggleCollapse,
@@ -16,12 +16,14 @@ export const AgentNode = memo(({ id, data }: NodeProps<Node<AgentNodeData, 'agen
       setActiveNode: state.setActiveNode,
       mcpServers: state.mcpServers,
       customTools: state.customTools,
+      globalTools: state.globalTools,
     }))
   );
 
   const [isConnectMenuOpen, setIsConnectMenuOpen] = useState(false);
   const [isMcpSelectorOpen, setIsMcpSelectorOpen] = useState(false);
   const [isToolSelectorOpen, setIsToolSelectorOpen] = useState(false);
+  const [isGlobalSelectorOpen, setIsGlobalSelectorOpen] = useState(false);
   const models = useStore((state) => state.models);
   const status = useStore((state) => (state.nodeStatuses[id] as NodeStatus) || 'idle');
   const errors = useStore((state) => state.nodeErrors[id]);
@@ -302,6 +304,86 @@ export const AgentNode = memo(({ id, data }: NodeProps<Node<AgentNodeData, 'agen
           </div>
         </div>
 
+        <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Settings className="w-3.5 h-3.5 text-blue-500" />
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Default Tools</span>
+              </div>
+              <div className="relative">
+                <button 
+                  onClick={(e) => { e.stopPropagation(); setIsGlobalSelectorOpen(!isGlobalSelectorOpen); }}
+                  className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded text-slate-400 hover:text-blue-500 transition-colors nodrag"
+                >
+                  <Plus className="w-3 h-3" />
+                </button>
+                {isGlobalSelectorOpen && (
+                  <div className="absolute right-0 top-full mt-1 w-52 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl z-[100] p-1 animate-in fade-in zoom-in-95 duration-150 nodrag">
+                    <div className="px-2 py-1 text-[9px] font-bold text-slate-400 uppercase border-b border-slate-100 dark:border-slate-700 mb-1">Add CrewAI Tool</div>
+                    <div className="max-h-48 overflow-y-auto custom-scrollbar">
+                      {['Search', 'Web', 'Files & Documents'].map(cat => {
+                        const catTools = globalTools.filter(t => t.category === cat && t.isEnabled && !(data.globalToolIds || []).includes(t.id));
+                        if (catTools.length === 0) return null;
+                        return (
+                          <div key={cat} className="mb-2 last:mb-0">
+                            <div className="px-2 py-1 text-[8px] font-bold text-slate-400 uppercase tracking-widest">{cat}</div>
+                            {catTools.map(tool => (
+                              <button
+                                key={tool.id}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const currentIds = data.globalToolIds || [];
+                                  updateNodeData(id, { globalToolIds: [...currentIds, tool.id] });
+                                  setIsGlobalSelectorOpen(false);
+                                }}
+                                className="w-full text-left px-2 py-1.5 text-[10px] text-slate-600 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded flex items-center justify-between group"
+                              >
+                                <span className="truncate">{tool.name}</span>
+                                <Plus className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100" />
+                              </button>
+                            ))}
+                          </div>
+                        );
+                      })}
+                      {globalTools.filter(t => t.isEnabled && !(data.globalToolIds || []).includes(t.id)).length === 0 && (
+                        <div className="px-2 py-2 text-[9px] text-slate-400 italic text-center">No more tools enabled</div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-1 min-h-[1.25rem]">
+              {(data.globalToolIds || []).length > 0 ? (
+                (data.globalToolIds || []).map(gtid => {
+                  const tool = globalTools.find(t => t.id === gtid);
+                  if (!tool) return null;
+                  return (
+                    <span 
+                      key={gtid} 
+                      className="px-1.5 py-0.5 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 text-[10px] font-medium rounded border border-blue-100 dark:border-blue-800/50 truncate max-w-full flex items-center gap-1 group/chip"
+                    >
+                      {tool.name}
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          updateNodeData(id, { globalToolIds: (data.globalToolIds || []).filter(sid => sid !== gtid) });
+                        }}
+                        className="opacity-0 group-hover/chip:opacity-100 p-0.5 hover:text-red-500 transition-opacity"
+                      >
+                        <X className="w-2 h-2" />
+                      </button>
+                    </span>
+                  );
+                })
+              ) : (
+                <span className="text-[9px] text-slate-400 italic">No default tools</span>
+              )}
+            </div>
+          </div>
+        </div>
+
         {childCount > 0 && (
           <div className="mt-2 flex flex-col gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-800">
             <div className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/50 w-fit px-2 py-1 rounded-md border border-slate-200 dark:border-slate-700 shadow-sm">
@@ -329,10 +411,10 @@ export const AgentNode = memo(({ id, data }: NodeProps<Node<AgentNodeData, 'agen
       <Handle type="source" position={Position.Left} id="left-source" className="w-2 h-2 bg-gray-400 border-none hover:bg-blue-500 transition-colors" />
 
       {/* Global Click Handler to close menus */}
-      {(isMcpSelectorOpen || isToolSelectorOpen) && (
+      {(isMcpSelectorOpen || isToolSelectorOpen || isGlobalSelectorOpen) && (
         <div 
           className="fixed inset-0 z-[50] nodrag cursor-default" 
-          onClick={(e) => { e.stopPropagation(); setIsMcpSelectorOpen(false); setIsToolSelectorOpen(false); }} 
+          onClick={(e) => { e.stopPropagation(); setIsMcpSelectorOpen(false); setIsToolSelectorOpen(false); setIsGlobalSelectorOpen(false); }} 
         />
       )}
     </div>

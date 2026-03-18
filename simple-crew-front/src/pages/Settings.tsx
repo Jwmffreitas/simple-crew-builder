@@ -10,9 +10,8 @@ import {
   Trash2,
   Calendar,
   ChevronRight,
-  ChevronDown,
-  ShieldCheck,
   X,
+  ShieldCheck,
   Copy,
   Wrench,
   Server,
@@ -21,82 +20,20 @@ import {
   Hash,
   Search,
   Sparkles,
-  PenTool,
   Network,
   Code,
   Edit,
   Terminal,
-  FileCode
+  FileCode,
+  FolderOpen,
+  Layout,
+  Type
 } from 'lucide-react';
 import { useStore } from '../store';
 import { HighlightedTextField } from '../components/HighlightedTextField';
+import { CustomSelect } from '../components/CustomSelect';
 import { type ModelConfig, type MCPServer, type CustomTool } from '../types';
 
-interface CustomSelectProps {
-  options: { label: string; value: string }[];
-  value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-  className?: string;
-}
-
-const CustomSelect = ({ options, value, onChange, placeholder, className }: CustomSelectProps) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const containerRef = React.useRef<HTMLDivElement>(null);
-
-  React.useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const selectedOption = options.find(opt => opt.value === value);
-
-  return (
-    <div className={`relative ${className}`} ref={containerRef}>
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full bg-brand-bg border border-brand-border rounded-2xl px-4 py-3 text-brand-text outline-none focus:ring-2 focus:ring-indigo-600 transition-all text-sm font-medium flex items-center justify-between text-left"
-      >
-        <span className={!selectedOption ? 'text-brand-muted' : ''}>
-          {selectedOption ? selectedOption.label : (placeholder || 'Select...')}
-        </span>
-        <ChevronDown className={`w-4 h-4 text-brand-muted transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
-      </button>
-
-      {isOpen && (
-        <div className="absolute z-[100] mt-2 w-full bg-brand-card border border-brand-border rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 py-1">
-          {options.length === 0 ? (
-            <div className="px-4 py-3 text-xs text-brand-muted italic text-center">No options available</div>
-          ) : (
-            options.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => {
-                  onChange(opt.value);
-                  setIsOpen(false);
-                }}
-                className={`w-full px-4 py-3 text-left text-sm transition-colors ${
-                  value === opt.value 
-                    ? 'bg-indigo-600 text-white font-bold' 
-                    : 'text-brand-text hover:bg-brand-bg hover:text-indigo-600'
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))
-          )}
-        </div>
-      )}
-    </div>
-  );
-};
 
 const SettingsPage = () => {
   const navigate = useNavigate();
@@ -106,20 +43,23 @@ const SettingsPage = () => {
     globalTools, updateToolConfig,
     customTools, addCustomTool, updateCustomTool, deleteCustomTool,
     mcpServers, addMCPServer, updateMCPServer, deleteMCPServer,
-    systemAiModelId, setSystemAiModelId, fetchSettings
+    systemAiModelId, setSystemAiModelId, fetchSettings,
+    workspaces, fetchWorkspaces, addWorkspace, updateWorkspace, deleteWorkspace, activeWorkspaceId, setActiveWorkspaceId
   } = useStore();
 
   React.useEffect(() => {
     fetchCredentials();
     fetchModels();
+    fetchWorkspaces();
     fetchSettings();
-  }, [fetchCredentials, fetchModels, fetchSettings]);
+  }, [fetchCredentials, fetchModels, fetchWorkspaces, fetchSettings]);
 
-  const [activeTab, setActiveTab] = useState<'credentials' | 'models' | 'tools' | 'mcp'>('credentials');
+  const [activeTab, setActiveTab] = useState<'credentials' | 'models' | 'tools' | 'mcp' | 'workspaces'>('credentials');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isModelModalOpen, setIsModelModalOpen] = useState(false);
   const [isMCPModalOpen, setIsMCPModalOpen] = useState(false);
   const [isCustomToolModalOpen, setIsCustomToolModalOpen] = useState(false);
+  const [isWorkspaceModalOpen, setIsWorkspaceModalOpen] = useState(false);
   const [newCred, setNewCred] = useState({ name: '', description: '', key: '', provider: '' });
   const [newModel, setNewModel] = useState<Omit<ModelConfig, 'id'>>({ 
     name: '', 
@@ -146,11 +86,16 @@ const SettingsPage = () => {
     description: '',
     code: ''
   });
+  const [newWorkspace, setNewWorkspace] = useState({
+    name: '',
+    path: ''
+  });
   const [mcpArgsString, setMcpArgsString] = useState('');
   const [newEnvVar, setNewEnvVar] = useState({ key: '', value: '' });
   const [editingModelId, setEditingModelId] = useState<string | null>(null);
   const [editingMCPId, setEditingMCPId] = useState<string | null>(null);
   const [editingCustomToolId, setEditingCustomToolId] = useState<string | null>(null);
+  const [editingWorkspaceId, setEditingWorkspaceId] = useState<string | null>(null);
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
 
   const toggleShowKey = (id: string) => {
@@ -293,6 +238,28 @@ const SettingsPage = () => {
     }
   };
 
+  const handleEditWorkspace = (ws: any) => {
+    setNewWorkspace({
+      name: ws.name,
+      path: ws.path
+    });
+    setEditingWorkspaceId(ws.id);
+    setIsWorkspaceModalOpen(true);
+  };
+
+  const handleSaveWorkspace = () => {
+    if (newWorkspace.name && newWorkspace.path) {
+      if (editingWorkspaceId) {
+        updateWorkspace(editingWorkspaceId, newWorkspace);
+      } else {
+        addWorkspace(newWorkspace);
+      }
+      setNewWorkspace({ name: '', path: '' });
+      setEditingWorkspaceId(null);
+      setIsWorkspaceModalOpen(false);
+    }
+  };
+
   return (
     <div className="flex h-screen bg-brand-bg font-sans transition-colors duration-300">
       {/* Sidebar */}
@@ -351,6 +318,17 @@ const SettingsPage = () => {
             </div>
             <ChevronRight className={`w-4 h-4 transition-transform ${activeTab === 'mcp' ? 'rotate-90' : ''}`} />
           </button>
+
+          <button 
+            onClick={() => setActiveTab('workspaces')}
+            className={`w-full flex items-center justify-between p-3 rounded-xl transition-all ${activeTab === 'workspaces' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600' : 'text-brand-muted hover:bg-brand-bg hover:text-brand-text'}`}
+          >
+            <div className="flex items-center gap-3 text-sm font-bold">
+              <FolderOpen className="w-4 h-4" />
+              Workspaces
+            </div>
+            <ChevronRight className={`w-4 h-4 transition-transform ${activeTab === 'workspaces' ? 'rotate-90' : ''}`} />
+          </button>
         </nav>
 
         <div className="p-4 border-t border-brand-border space-y-4">
@@ -370,6 +348,7 @@ const SettingsPage = () => {
               Model used for AI assistance and auto-filling inputs.
             </p>
           </div>
+
 
           <div className="bg-brand-bg rounded-xl p-4 flex flex-col items-center gap-2 text-center text-[10px] text-brand-muted">
             <ShieldCheck className="w-8 h-8 text-indigo-500 opacity-80" />
@@ -559,72 +538,112 @@ const SettingsPage = () => {
 
               <div className="space-y-12">
                 {/* Default Tools Section */}
-                <section>
-                  <h2 className="text-sm font-bold text-brand-muted uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
-                    <Wrench className="w-4 h-4 opacity-50" />
-                    Default Tools
-                  </h2>
-                  <div className="grid grid-cols-1 gap-6">
-                    {globalTools.map((tool) => (
-                      <div key={tool.id} className={`bg-brand-card border rounded-2xl p-6 transition-all duration-300 ${tool.isEnabled ? 'border-indigo-500/30 shadow-lg shadow-indigo-500/5' : 'border-brand-border'}`}>
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-center gap-4">
-                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${tool.isEnabled ? 'bg-indigo-600 text-white' : 'bg-brand-bg text-brand-muted'}`}>
-                              {tool.id === 'serper' && <Search className="w-5 h-5" />}
-                              {tool.id === 'scrape' && <Sparkles className="w-5 h-5" />}
-                              {tool.id === 'file_read' && <PenTool className="w-5 h-5" />}
-                            </div>
-                            <div>
-                              <h3 className="font-bold text-brand-text flex items-center gap-2">
-                                {tool.name}
-                                {tool.isEnabled && (
-                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                )}
-                              </h3>
-                              <p className="text-xs text-brand-muted">{tool.description}</p>
-                            </div>
-                          </div>
-                          
-                          <button
-                            onClick={() => updateToolConfig(tool.id, { isEnabled: !tool.isEnabled })}
-                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
-                              tool.isEnabled ? 'bg-indigo-600' : 'bg-brand-bg border border-brand-border'
-                            }`}
-                          >
-                            <span
-                              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                                tool.isEnabled ? 'translate-x-6' : 'translate-x-1'
-                              }`}
-                            />
-                          </button>
+                <section className="space-y-12">
+                  {Object.entries(
+                    globalTools.reduce((acc, tool) => {
+                      const category = tool.category || 'Other';
+                      if (!acc[category]) acc[category] = [];
+                      acc[category].push(tool);
+                      return acc;
+                    }, {} as Record<string, typeof globalTools>)
+                  ).sort(([catA], [catB]) => {
+                    // Place Files & Documents first
+                    if (catA === 'Files & Documents') return -1;
+                    if (catB === 'Files & Documents') return 1;
+                    return catA.localeCompare(catB);
+                  }).map(([category, tools]) => (
+                    <div key={category} className="space-y-6">
+                      <div className="flex items-center gap-4 mb-6">
+                        <div className={`p-2 rounded-lg ${
+                          category === 'Files & Documents' ? 'bg-amber-500/10 text-amber-500' :
+                          category === 'Search' ? 'bg-blue-500/10 text-blue-500' :
+                          category === 'Web' ? 'bg-emerald-500/10 text-emerald-500' :
+                          'bg-indigo-500/10 text-indigo-500'
+                        }`}>
+                          {category === 'Search' && <Search className="w-5 h-5" />}
+                          {category === 'Web' && <Sparkles className="w-5 h-5" />}
+                          {category === 'Files & Documents' && <FileCode className="w-5 h-5" />}
+                          {category === 'Other' && <Wrench className="w-5 h-5" />}
                         </div>
-
-                        {tool.isEnabled && tool.requiresKey && (
-                          <div className="mt-6 pt-6 border-t border-brand-border animate-in slide-in-from-top-2 duration-300">
-                            <label className="block text-xs font-bold text-brand-muted uppercase tracking-wider mb-2">API Key</label>
-                            <div className="relative max-w-md">
-                              <input 
-                                type={showKeys[tool.id] ? 'text' : 'password'}
-                                placeholder="Enter Serper API Key..."
-                                className="w-full bg-brand-bg border border-brand-border rounded-xl pl-4 pr-16 py-3 text-brand-text outline-none focus:ring-2 focus:ring-indigo-600 transition-all font-mono text-sm"
-                                value={tool.apiKey || ''}
-                                onChange={(e) => updateToolConfig(tool.id, { apiKey: e.target.value })}
-                              />
-                              <button 
-                                onClick={() => toggleShowKey(tool.id)}
-                                className="absolute right-4 top-1/2 -translate-y-1/2 text-brand-muted hover:text-brand-text transition-colors"
+                        <div className="flex-1">
+                          <h2 className="text-lg font-bold text-brand-text tracking-tight uppercase">
+                            {category}
+                          </h2>
+                          <div className="h-px bg-gradient-to-r from-brand-border via-brand-border/20 to-transparent mt-1" />
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 gap-6">
+                        {tools.map((tool) => (
+                          <div key={tool.id} className={`bg-brand-card border rounded-2xl p-6 transition-all duration-300 ${tool.isEnabled ? 'border-indigo-500/30 shadow-lg shadow-indigo-500/5' : 'border-brand-border'}`}>
+                            <div className="flex items-start justify-between">
+                              <div className="flex items-center gap-4">
+                                <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${tool.isEnabled ? 'bg-indigo-600 text-white' : 'bg-brand-bg text-brand-muted'}`}>
+                                  {tool.id === 'serper' && <Search className="w-5 h-5" />}
+                                  {tool.id === 'scrape' && <Sparkles className="w-5 h-5" />}
+                                  {tool.id === 'ocr' && <Eye className="w-5 h-5" />}
+                                  {tool.category === 'Files & Documents' && (
+                                    tool.id.includes('search') ? <Search className="w-5 h-5" /> : 
+                                    tool.id.includes('write') ? <Edit className="w-5 h-5" /> :
+                                    tool.id.includes('mdx') ? <Layout className="w-5 h-5" /> :
+                                    tool.id.includes('txt') ? <Type className="w-5 h-5" /> :
+                                    <FileCode className="w-5 h-5" />
+                                  )}
+                                  {!(['serper', 'scrape', 'ocr'].includes(tool.id) || tool.category === 'Files & Documents') && <Wrench className="w-5 h-5" />}
+                                </div>
+                                <div>
+                                  <h3 className="font-bold text-brand-text flex items-center gap-2">
+                                    {tool.name}
+                                    {tool.isEnabled && (
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                    )}
+                                  </h3>
+                                  <p className="text-xs text-brand-muted">{tool.description}</p>
+                                </div>
+                              </div>
+                              
+                              <button
+                                onClick={() => updateToolConfig(tool.id, { isEnabled: !tool.isEnabled })}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                                  tool.isEnabled ? 'bg-indigo-600' : 'bg-brand-bg border border-brand-border'
+                                }`}
                               >
-                                {showKeys[tool.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                <span
+                                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                    tool.isEnabled ? 'translate-x-6' : 'translate-x-1'
+                                  }`}
+                                />
                               </button>
                             </div>
-                            <p className="mt-2 text-[10px] text-brand-muted">
-                              Used for Google Search results. Get yours at <a href="https://serper.dev" target="_blank" rel="noreferrer" className="text-indigo-500 hover:underline">serper.dev</a>
-                            </p>
+
+                            {tool.isEnabled && tool.requiresKey && (
+                              <div className="mt-6 pt-6 border-t border-brand-border animate-in slide-in-from-top-2 duration-300">
+                                <label className="block text-xs font-bold text-brand-muted uppercase tracking-wider mb-2">API Key</label>
+                                <div className="relative max-w-md">
+                                  <input 
+                                    type={showKeys[tool.id] ? 'text' : 'password'}
+                                    placeholder="Enter Serper API Key..."
+                                    className="w-full bg-brand-bg border border-brand-border rounded-xl pl-4 pr-16 py-3 text-brand-text outline-none focus:ring-2 focus:ring-indigo-600 transition-all font-mono text-sm"
+                                    value={tool.apiKey || ''}
+                                    onChange={(e) => updateToolConfig(tool.id, { apiKey: e.target.value })}
+                                  />
+                                  <button 
+                                    onClick={() => toggleShowKey(tool.id)}
+                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-brand-muted hover:text-brand-text transition-colors"
+                                  >
+                                    {showKeys[tool.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                  </button>
+                                </div>
+                                <p className="mt-2 text-[10px] text-brand-muted">
+                                  Used for Google Search results. Get yours at <a href="https://serper.dev" target="_blank" rel="noreferrer" className="text-indigo-500 hover:underline">serper.dev</a>
+                                </p>
+                              </div>
+                            )}
                           </div>
-                        )}
+                        ))}
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  ))}
                 </section>
 
                 {/* Custom Tools Section */}
@@ -792,6 +811,81 @@ const SettingsPage = () => {
                           className="p-2 text-brand-muted hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
                         >
                           <Trash2 className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'workspaces' && (
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <header className="flex items-center justify-between mb-10">
+                <div>
+                  <h1 className="text-3xl font-bold text-brand-text tracking-tight mb-2">Workspaces</h1>
+                  <p className="text-brand-muted text-sm">Define directories for agents to interact with files.</p>
+                </div>
+                <button 
+                  onClick={() => {
+                    setEditingWorkspaceId(null);
+                    setNewWorkspace({ name: '', path: '' });
+                    setIsWorkspaceModalOpen(true);
+                  }}
+                  className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg shadow-indigo-600/20 transition-all active:scale-95"
+                >
+                  <Plus className="w-5 h-5" />
+                  New Workspace
+                </button>
+              </header>
+
+              <div className="space-y-4">
+                {workspaces.length === 0 ? (
+                  <div className="py-20 text-center bg-brand-card border border-brand-border border-dashed rounded-3xl">
+                    <FolderOpen className="w-12 h-12 text-brand-muted mx-auto mb-4 opacity-20" />
+                    <p className="text-brand-muted">No workspaces configured. Add one to enable file operations.</p>
+                  </div>
+                ) : (
+                  workspaces.map((ws) => (
+                    <div key={ws.id} className="bg-brand-card border border-brand-border rounded-2xl p-6 flex items-center justify-between group hover:shadow-md transition-all">
+                      <div className="flex items-center gap-4 flex-1">
+                        <div className={`w-12 h-12 ${activeWorkspaceId === ws.id ? 'bg-indigo-600 text-white' : 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600'} rounded-xl flex items-center justify-center`}>
+                          <FolderOpen className="w-6 h-6" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-bold text-brand-text">{ws.name}</h3>
+                            {activeWorkspaceId === ws.id && (
+                              <span className="bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-widest">Active</span>
+                            )}
+                          </div>
+                          <p className="text-[10px] font-mono text-brand-muted mt-1 bg-brand-bg px-2 py-1 rounded w-fit">{ws.path}</p>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                        {activeWorkspaceId !== ws.id && (
+                          <button 
+                            onClick={() => setActiveWorkspaceId(ws.id)}
+                            className="text-[10px] font-bold text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 px-3 py-1.5 rounded-lg transition-all"
+                          >
+                            Set Active
+                          </button>
+                        )}
+                        <button 
+                          onClick={() => handleEditWorkspace(ws)}
+                          className="p-2 text-brand-muted hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-all"
+                          title="Edit"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => deleteWorkspace(ws.id)}
+                          className="p-2 text-brand-muted hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
@@ -1365,6 +1459,70 @@ const SettingsPage = () => {
                   className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-lg shadow-indigo-600/20 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {editingCustomToolId ? 'Update Tool' : 'Save Tool'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal - Workspace */}
+      {isWorkspaceModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setIsWorkspaceModalOpen(false)} />
+          <div className="relative w-full max-w-md bg-brand-card border border-brand-border rounded-3xl shadow-2xl p-8 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-brand-text">{editingWorkspaceId ? 'Edit Workspace' : 'Add New Workspace'}</h2>
+              <button onClick={() => setIsWorkspaceModalOpen(false)} className="p-2 hover:bg-brand-bg rounded-full text-brand-muted transition-colors">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="space-y-5">
+              <div>
+                <label className="block text-xs font-bold text-brand-muted uppercase tracking-wider mb-2">Workspace Name</label>
+                <input 
+                  autoFocus
+                  placeholder="e.g. My Project Files"
+                  className="w-full bg-brand-bg border border-brand-border rounded-xl px-4 py-3 text-brand-text outline-none focus:ring-2 focus:ring-indigo-600 transition-all font-medium"
+                  value={newWorkspace.name}
+                  onChange={(e) => setNewWorkspace({...newWorkspace, name: e.target.value})}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-brand-muted uppercase tracking-wider mb-2">Workspace Folder Name</label>
+                <div className="flex items-center">
+                  <div className="bg-brand-bg border border-brand-border border-r-0 rounded-l-xl px-4 py-3 text-brand-muted font-mono text-sm">
+                    workspaces/
+                  </div>
+                  <input 
+                    placeholder="e.g. project-x"
+                    className="flex-1 bg-brand-bg border border-brand-border rounded-r-xl px-4 py-3 text-brand-text outline-none focus:ring-2 focus:ring-indigo-600 transition-all font-mono text-sm"
+                    value={newWorkspace.path.replace('workspaces/', '')}
+                    onChange={(e) => {
+                      const val = e.target.value.replace('workspaces/', '').replace(/^[./\\]+/, '');
+                      setNewWorkspace({...newWorkspace, path: val})
+                    }}
+                  />
+                </div>
+                <p className="mt-2 text-[10px] text-brand-muted italic">
+                  The folder will be automatically created inside the <strong>workspaces/</strong> directory of the backend.
+                </p>
+              </div>
+
+              <div className="pt-6 flex gap-4">
+                <button 
+                  onClick={() => setIsWorkspaceModalOpen(false)}
+                  className="flex-1 py-3 bg-brand-bg border border-brand-border text-brand-text rounded-xl font-bold hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  disabled={!newWorkspace.name || !newWorkspace.path}
+                  onClick={handleSaveWorkspace}
+                  className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-lg shadow-indigo-600/20 transition-all active:scale-95 disabled:opacity-50"
+                >
+                  {editingWorkspaceId ? 'Update' : 'Save'}
                 </button>
               </div>
             </div>

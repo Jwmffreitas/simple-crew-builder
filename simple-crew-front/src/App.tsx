@@ -12,18 +12,22 @@ function App() {
   const fetchCredentials = useStore((state) => state.fetchCredentials);
   const fetchMCPServers = useStore((state) => state.fetchMCPServers);
   const fetchCustomTools = useStore((state) => state.fetchCustomTools);
+  const fetchWorkspaces = useStore((state) => state.fetchWorkspaces);
+  const fetchSettings = useStore((state) => state.fetchSettings);
 
   useEffect(() => {
     fetchModels();
     fetchCredentials();
     fetchMCPServers();
     fetchCustomTools();
+    fetchWorkspaces();
+    fetchSettings();
     if (theme === 'dark') {
       document.documentElement.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
     }
-  }, [theme, fetchModels, fetchCredentials, fetchMCPServers]);
+  }, [theme, fetchModels, fetchCredentials, fetchMCPServers, fetchWorkspaces, fetchSettings]);
 
   return (
     <BrowserRouter>

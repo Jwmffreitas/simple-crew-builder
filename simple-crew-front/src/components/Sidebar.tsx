@@ -1,10 +1,15 @@
 import React, { useRef } from 'react';
-import { User, CheckSquare, Users, Upload, Settings, PlusCircle } from 'lucide-react';
+import { User, CheckSquare, Users, Upload, Settings, PlusCircle, FolderOpen } from 'lucide-react';
 import { useReactFlow } from '@xyflow/react';
 import { useStore } from '../store';
+import { CustomSelect } from './CustomSelect';
 
 export function Sidebar() {
   const setIsSettingsOpen = useStore((state) => state.setIsSettingsOpen);
+  const workspaces = useStore((state) => state.workspaces);
+  const activeWorkspaceId = useStore((state) => state.activeWorkspaceId);
+  const setActiveWorkspaceId = useStore((state) => state.setActiveWorkspaceId);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { fitView } = useReactFlow();
   const loadProjectJson = useStore((state) => state.loadProjectJson);
@@ -156,6 +161,20 @@ export function Sidebar() {
           onChange={handleFileChange}
           className="hidden"
         />
+        <div className="p-4 border-b border-brand-border bg-brand-bg/20">
+          <div className="flex items-center gap-2 px-1 mb-2">
+            <FolderOpen className="w-3.5 h-3.5 text-indigo-500" />
+            <span className="text-[10px] font-bold text-brand-muted uppercase tracking-wider">Project Workspace</span>
+          </div>
+          <CustomSelect 
+            options={workspaces.map(ws => ({ label: ws.name, value: ws.id }))}
+            value={activeWorkspaceId || ''}
+            onChange={(val: string) => setActiveWorkspaceId(val)}
+            placeholder="Select Workspace..."
+            className="w-full"
+          />
+        </div>
+
         <button
           onClick={() => fileInputRef.current?.click()}
           className="w-full flex items-center gap-3 px-4 py-2 text-sm font-medium text-brand-muted hover:bg-brand-card hover:text-brand-text rounded-lg transition-all"

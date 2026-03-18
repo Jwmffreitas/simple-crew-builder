@@ -7,13 +7,14 @@ from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select
 from .crew_builder import run_crew_stream
 from .database import init_db, get_session
-from .models import CrewProject, User, Credential, LLMModel, MCPServer, AppSettings, CustomTool
+from .models import CrewProject, User, Credential, LLMModel, MCPServer, AppSettings, CustomTool, Workspace
 from .schemas import (
     GraphData, ProjectCreate, ProjectRead, ProjectUpdate, 
     CredentialCreate, CredentialRead, CredentialUpdate,
     LLMModelCreate, LLMModelRead, LLMModelUpdate,
     MCPServerCreate, MCPServerRead, MCPServerUpdate,
     CustomToolCreate, CustomToolRead, CustomToolUpdate,
+    WorkspaceCreate, WorkspaceRead, WorkspaceUpdate,
     AppSettingsRead, AppSettingsUpdate,
     AiSuggestionRequest, AiSuggestionResponse,
     AiBulkSuggestionRequest, AiBulkSuggestionResponse,
@@ -104,7 +105,7 @@ def resolve_custom_tools(graph_data: GraphData, session: Session):
     """
     used_tool_ids = set()
     for node in graph_data.nodes:
-        if node.type == 'agent' and hasattr(node.data, 'customToolIds') and node.data.customToolIds:
+        if node.type in ['agent', 'task'] and hasattr(node.data, 'customToolIds') and node.data.customToolIds:
             for tid in node.data.customToolIds:
                 used_tool_ids.add(tid)
     
@@ -234,6 +235,15 @@ async def export_project_python(project_id: str, session: Session = Depends(get_
                         "provider": provider
                     }
         
+        # Fetch Workspace
+        workspace_path = None
+        settings = session.exec(select(AppSettings).where(AppSettings.user_id == ROOT_USER_ID)).first()
+        if settings and settings.active_workspace_id:
+            ws = session.get(Workspace, settings.active_workspace_id)
+            if ws:
+                workspace_path = ws.path # Relative path like 'workspaces/xxx'
+
+        # Fetch MCP Servers
         if all_mcp_ids:
             statement = select(MCPServer).where(MCPServer.id.in_(list(all_mcp_ids)))
             mcp_records = session.exec(statement).all()
@@ -255,7 +265,8 @@ async def export_project_python(project_id: str, session: Session = Depends(get_
             mcp_servers=mcp_servers_data,
             project_description=project.description or "",
             agent_llms=agent_llms_data,
-            providers=list(unique_providers)
+            providers=list(unique_providers),
+            workspace_path=workspace_path
         )
         
         # Nome do arquivo sanitizado para o header de download
@@ -485,6 +496,109 @@ async def delete_custom_tool(tool_id: str, session: Session = Depends(get_sessio
     session.delete(tool)
     session.commit()
     return {"message": "Custom Tool removida com sucesso"}
+
+# --- CRUD de Gerenciamento de Workspaces ---
+
+import os
+from pathlib import Path
+
+def ensure_workspace_dir(workspace_path: str) -> str:
+    """Garante que a pasta existe e retorna o path relativo (ex: workspaces/minha-pasta)"""
+    try:
+        # 1. Normaliza o path: remove leading slashes e ./
+        clean_path = workspace_path.lstrip("./\\ ")
+        
+        # 2. Garante o prefixo workspaces/
+        if not clean_path.startswith("workspaces"):
+            normalized_path = os.path.join("workspaces", clean_path)
+        else:
+            normalized_path = clean_path
+            
+        # 3. Cria a pasta fisicamente
+        abs_path = os.path.abspath(os.path.join(os.getcwd(), normalized_path))
+        if not os.path.exists(abs_path):
+            os.makedirs(abs_path, exist_ok=True)
+            print(f"Diretório de Workspace criado: {abs_path}")
+            
+        return normalized_path.replace("\\", "/") # Retorna sempre com forward slashes para o DB
+    except Exception as e:
+        print(f"Erro ao criar diretório de workspace: {e}")
+        return workspace_path
+
+@app.post("/api/v1/workspaces", response_model=WorkspaceRead)
+async def create_workspace(ws: WorkspaceCreate, session: Session = Depends(get_session)):
+    # Check for duplicates
+    existing = session.exec(select(Workspace).where(Workspace.path == ws.path)).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Um workspace com este caminho já existe")
+
+    # Garante que a pasta existe e normaliza o path para o banco
+    normalized_path = ensure_workspace_dir(ws.path)
+    
+    new_ws = Workspace(
+        name=ws.name,
+        path=normalized_path,
+        user_id=ROOT_USER_ID
+    )
+    session.add(new_ws)
+    session.commit()
+    session.refresh(new_ws)
+    return new_ws
+
+@app.get("/api/v1/workspaces", response_model=List[WorkspaceRead])
+async def list_workspaces(session: Session = Depends(get_session)):
+    statement = select(Workspace).where(Workspace.user_id == ROOT_USER_ID).order_by(Workspace.created_at.desc())
+    workspaces = session.exec(statement).all()
+    return workspaces
+
+@app.get("/api/v1/workspaces/{ws_id}", response_model=WorkspaceRead)
+async def get_workspace(ws_id: str, session: Session = Depends(get_session)):
+    ws = session.get(Workspace, ws_id)
+    if not ws:
+        raise HTTPException(status_code=404, detail="Workspace não encontrado")
+    return ws
+
+@app.patch("/api/v1/workspaces/{ws_id}", response_model=WorkspaceRead)
+@app.put("/api/v1/workspaces/{ws_id}", response_model=WorkspaceRead)
+async def update_workspace(ws_id: str, ws_update: WorkspaceUpdate, session: Session = Depends(get_session)):
+    db_ws = session.get(Workspace, ws_id)
+    if not db_ws:
+        raise HTTPException(status_code=404, detail="Workspace não encontrado")
+    
+    update_data = ws_update.model_dump(exclude_unset=True)
+    
+    # Se mudar o path, garante que a nova pasta existe e não é duplicada
+    if 'path' in update_data:
+        normalized_path = ensure_workspace_dir(update_data['path'])
+        if normalized_path != db_ws.path:
+            existing = session.exec(select(Workspace).where(Workspace.path == normalized_path)).first()
+            if existing:
+                raise HTTPException(status_code=400, detail="Um workspace com este caminho já existe")
+        update_data['path'] = normalized_path
+        
+    for key, value in update_data.items():
+        setattr(db_ws, key, value)
+    
+    session.add(db_ws)
+    session.commit()
+    session.refresh(db_ws)
+    return db_ws
+
+@app.delete("/api/v1/workspaces/{ws_id}")
+async def delete_workspace(ws_id: str, session: Session = Depends(get_session)):
+    ws = session.get(Workspace, ws_id)
+    if not ws:
+        raise HTTPException(status_code=404, detail="Workspace não encontrado")
+    
+    # Se era o workspace ativo, limpa nas configurações
+    settings = session.exec(select(AppSettings).where(AppSettings.user_id == ROOT_USER_ID)).first()
+    if settings and str(settings.active_workspace_id) == ws_id:
+        settings.active_workspace_id = None
+        session.add(settings)
+        
+    session.delete(ws)
+    session.commit()
+    return {"message": "Workspace removido com sucesso"}
 
 # --- Settings Endpoints ---
 @app.get("/api/v1/settings", response_model=AppSettingsRead)

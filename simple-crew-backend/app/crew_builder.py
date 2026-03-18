@@ -2,22 +2,40 @@ import sys
 import threading
 import queue
 import json
-from typing import Dict, List, Iterator
+import typing
+from typing import Dict, List, Iterator, Any
+from pathlib import Path
 from crewai import Agent, Task, Crew, Process
 from crewai.tools import tool, BaseTool
 from crewai.llm import LLM
 import os
 from pydantic import BaseModel, Field
-from crewai_tools import MCPServerAdapter
-from mcp import StdioServerParameters
+from .models import LLMModel, Credential, MCPServer, AppSettings, Workspace
 from .schemas import GraphData
-from .models import LLMModel, Credential, MCPServer
+from crewai_tools import (
+    SerperDevTool, 
+    ScrapeWebsiteTool, 
+    DirectoryReadTool, 
+    FileReadTool, 
+    FileWriterTool,
+    DirectorySearchTool,
+    PDFSearchTool,
+    DOCXSearchTool,
+    JSONSearchTool,
+    XMLSearchTool,
+    CSVSearchTool,
+    MDXSearchTool,
+    TXTSearchTool,
+    OCRTool
+)
 from .database import engine
 from sqlmodel import Session, select
 from dotenv import load_dotenv
 from contextlib import ExitStack
 
 load_dotenv()
+
+ROOT_USER_ID = "00000000-0000-0000-0000-000000000000"
 
 class StreamToQueue:
     def __init__(self, q: queue.Queue):
@@ -49,6 +67,159 @@ playwright_schemas = {
     "browser_type": BrowserTypeSchema,
     "browser_snapshot": BrowserSnapshotSchema
 }
+
+# --- WORKSPACE AWARE FILE TOOLS ---
+class WorkspaceFileReadTool(FileReadTool):
+    workspace_path: str = Field(..., description="The root path of the workspace")
+    
+    def _run(self, **kwargs: Any) -> str:
+        file_path = kwargs.get('file_path') or self.file_path
+        if file_path:
+            abs_workspace = os.path.abspath(self.workspace_path)
+            if not os.path.isabs(file_path):
+                file_path = os.path.join(abs_workspace, file_path)
+            kwargs['file_path'] = file_path
+        
+        print(f"WorkspaceFileReadTool: reading {kwargs.get('file_path')}")
+        return super()._run(**kwargs)
+
+class WorkspaceFileWriterTool(FileWriterTool):
+    workspace_path: str = Field(..., description="The root path of the workspace")
+    
+    def _run(self, **kwargs: Any) -> str:
+        requested_dir = kwargs.get('directory')
+        abs_workspace = os.path.abspath(self.workspace_path)
+        
+        # Se o agente não passar diretório, ou passar algo relativo, forçamos o workspace
+        if not requested_dir or not os.path.isabs(requested_dir):
+            if not requested_dir or requested_dir == "./":
+                kwargs['directory'] = abs_workspace
+            else:
+                kwargs['directory'] = os.path.join(abs_workspace, requested_dir.lstrip('./\\'))
+        
+        print(f"WorkspaceFileWriterTool: writing {kwargs.get('filename')} to {kwargs.get('directory')}")
+        return super()._run(**kwargs)
+
+def neutralize_path(path: str, abs_workspace: str) -> str:
+    """
+    Transforma qualquer caminho (absoluto ou relativo) em um caminho seguro 
+    dentro do workspace, preservando a estrutura de subpastas pretendida,
+    mas sem repetir a hierarquia do sistema de arquivos do host.
+    """
+    if not path:
+        return abs_workspace
+    
+    # 1. Normaliza e resolve o caminho para absoluto para comparação
+    abs_path = os.path.abspath(path)
+    
+    # 2. Se já estiver no workspace, excelente.
+    if abs_path.startswith(abs_workspace):
+        return abs_path
+        
+    # 3. Caso contrário, calculamos o caminho relativo ao root do backend (CWD)
+    # Ex: C:\projetos\SimpleCrew\simple-crew-builder\index.html -> simple-crew-builder\index.html
+    cwd = os.getcwd()
+    try:
+        rel_to_cwd = os.path.relpath(abs_path, cwd)
+    except ValueError:
+        # Se estiver em drives diferentes (Windows), pegamos apenas o basename + subpastas do path original
+        _, path_no_drive = os.path.splitdrive(path)
+        rel_to_cwd = path_no_drive.lstrip('./\\')
+
+    # 4. Removemos qualquer '..' para garantir que ele não tente fugir do workspace
+    # rel_to_cwd pode ser '../../etc/passwd' -> isso vira 'etc/passwd'
+    safe_rel = rel_to_cwd.replace('..', '').lstrip('./\\')
+    
+    # 5. Junta ao workspace
+    return os.path.join(abs_workspace, safe_rel)
+
+def get_safe_open(workspace_path: str):
+    import builtins
+    abs_workspace = os.path.abspath(workspace_path)
+    real_open = builtins.open
+    
+    def safe_open(file, *args, **kwargs):
+        safe_file = neutralize_path(str(file), abs_workspace)
+        return real_open(safe_file, *args, **kwargs)
+    return safe_open
+
+def get_safe_pathlib(workspace_path: str):
+    abs_workspace = os.path.abspath(workspace_path)
+    original_path = Path
+    
+    class SafePath(original_path):
+        def _enforce(self):
+            return SafePath(neutralize_path(str(self), abs_workspace))
+
+        def open(self, mode='r', buffering=-1, encoding=None, errors=None, newline=None):
+            safe = self._enforce()
+            return super(SafePath, safe).open(mode, buffering, encoding, errors, newline)
+
+        def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+            safe = self._enforce()
+            return super(SafePath, safe).mkdir(mode, parents, exist_ok)
+            
+        def write_text(self, data, encoding=None, errors=None, newline=None):
+            safe = self._enforce()
+            return super(SafePath, safe).write_text(data, encoding, errors, newline)
+            
+        def write_bytes(self, data):
+            safe = self._enforce()
+            return super(SafePath, safe).write_bytes(data)
+
+    return SafePath
+
+def get_safe_os_module(workspace_path: str):
+    import os as real_os
+    abs_workspace = real_os.path.abspath(workspace_path)
+    
+    class SafeOS:
+        def __init__(self):
+            # Copia todos os membros do os original
+            for name in dir(real_os):
+                setattr(self, name, getattr(real_os, name))
+        
+        def _enforce(self, path):
+            return neutralize_path(path, abs_workspace)
+
+        def mkdir(self, path, mode=0o777): return real_os.mkdir(self._enforce(path), mode)
+        def makedirs(self, name, mode=0o777, exist_ok=False): return real_os.makedirs(self._enforce(name), mode, exist_ok)
+        def remove(self, path): return real_os.remove(self._enforce(path))
+        def rmdir(self, path): return real_os.rmdir(self._enforce(path))
+        def listdir(self, path='.'): return real_os.listdir(self._enforce(path))
+        def chdir(self, path): pass # Proibido mudar de diretório global
+
+    return SafeOS()
+
+def wrap_tool_with_workspace_guard(tool_instance: BaseTool, workspace_path: str):
+    """
+    Intercepta a execução de qualquer ferramenta e garante que argumentos 
+    relacionados a caminhos sejam forçados para dentro do workspace.
+    Também limpa atributos da instância que possam estar apontando para fora.
+    """
+    original_run = tool_instance._run
+    abs_workspace = os.path.abspath(workspace_path)
+    
+    # Lista de atributos comuns que CrewAI tools usam internamente
+    attr_fields = ['path', 'file_path', 'directory', 'dir_path', 'filename', 'output_file']
+
+    def protected_run(*args, **kwargs):
+        # 1. Enforce instance attributes
+        for attr in attr_fields:
+            if hasattr(tool_instance, attr):
+                val = getattr(tool_instance, attr)
+                if isinstance(val, str) and val:
+                    setattr(tool_instance, attr, neutralize_path(val, abs_workspace))
+
+        # 2. Enforce kwargs
+        for field in attr_fields:
+            if field in kwargs and isinstance(kwargs[field], str) and kwargs[field]:
+                kwargs[field] = neutralize_path(kwargs[field], abs_workspace)
+
+        return original_run(*args, **kwargs)
+
+    tool_instance._run = protected_run
+    return tool_instance
 
 def run_crew_stream(graph_data: GraphData) -> Iterator[str]:
     nodes = {node.id: node for node in graph_data.nodes}
@@ -114,7 +285,37 @@ def run_crew_stream(graph_data: GraphData) -> Iterator[str]:
         sys.stdout = StreamToQueue(q)
         
         with ExitStack() as stack:
+            def log_debug(msg):
+                """Helper to log both to queue (frontend) and terminal"""
+                full_msg = f"DEBUG: {msg}\n"
+                q.put(json.dumps({"type": "log", "data": full_msg}) + "\n")
+                # Tenta printar no stdout real (terminal) se disponível
+                try:
+                    if sys.__stdout__:
+                        sys.__stdout__.write(full_msg)
+                        sys.__stdout__.flush()
+                    else:
+                        print(full_msg)
+                except:
+                    pass
+
             try:
+                # --- PRE-STEP: Resolve Workspace Path (Physical for this run) ---
+                workspace_path = None
+                with Session(engine) as session:
+                    settings = session.exec(select(AppSettings).where(AppSettings.user_id == ROOT_USER_ID)).first()
+                    if settings and settings.active_workspace_id:
+                        ws_record = session.get(Workspace, settings.active_workspace_id)
+                        if ws_record:
+                            workspace_path = os.path.abspath(os.path.join(os.getcwd(), ws_record.path))
+                            log_debug(f"Resolved workspace_path: {workspace_path}")
+                    
+                    if not workspace_path:
+                        workspace_path = os.path.abspath(os.path.join(os.getcwd(), "workspaces", "default"))
+                    
+                    if not os.path.exists(workspace_path):
+                        os.makedirs(workspace_path, exist_ok=True)
+
                 # --- 1. Preparação de Ferramentas MCP ---
                 # Mapeia Agent ID -> Lista de Ferramentas
                 agent_tools_map = {}
@@ -126,20 +327,6 @@ def run_crew_stream(graph_data: GraphData) -> Iterator[str]:
                     for mid in mcp_server_ids:
                         all_mcp_ids.add(mid)
                 
-                def log_debug(msg):
-                    """Helper to log both to queue (frontend) and terminal"""
-                    full_msg = f"DEBUG: {msg}\n"
-                    q.put(json.dumps({"type": "log", "data": full_msg}) + "\n")
-                    # Tenta printar no stdout real (terminal) se disponível
-                    try:
-                        if sys.__stdout__:
-                            sys.__stdout__.write(full_msg)
-                            sys.__stdout__.flush()
-                        else:
-                            print(full_msg)
-                    except:
-                        pass
-
                 log_debug(f"Unique MCP IDs found in graph: {all_mcp_ids}")
                 
                 # Carregamos do banco e ativamos os Adapters
@@ -192,14 +379,67 @@ def run_crew_stream(graph_data: GraphData) -> Iterator[str]:
                                         log_debug(f"Skipping non-essential Playwright tool: {mcp_tool.name}")
                             else:
                                 processed_tools = raw_tools
-                                        
+                            
+                            for mcp_tool in processed_tools:
+                                wrap_tool_with_workspace_guard(mcp_tool, workspace_path)
+                                
                             mcp_adapters_cache[mcp_id] = processed_tools
                         except Exception as e:
                             log_debug(f"Connection failed for {mcp_record.name}: {str(e)}")
-
-                # --- 2. Instanciação de Agentes (Agora com ferramentas) ---
                 def resolve_node_tools(node_data, node_name, include_mcp=True):
                     node_tools = []
+                    
+                    # 1. Default Tools (globalTools)
+                    global_ids = getattr(node_data, 'globalToolIds', []) or []
+                    global_configs = {t.id: t for t in (graph_data.globalTools or [])}
+                    
+                    for gid in global_ids:
+                        config = global_configs.get(gid)
+                        if not config or not config.isEnabled:
+                            continue
+                            
+                        try:
+                            if gid == 'serper':
+                                node_tools.append(SerperDevTool(api_key=config.apiKey))
+                            elif gid == 'scrape':
+                                node_tools.append(ScrapeWebsiteTool())
+                            elif gid == 'directory_read':
+                                node_tools.append(DirectoryReadTool(directory=workspace_path))
+                            elif gid == 'file_read':
+                                # Use workspace-aware version if path available
+                                if workspace_path:
+                                    node_tools.append(WorkspaceFileReadTool(workspace_path=workspace_path))
+                                else:
+                                    node_tools.append(FileReadTool()) 
+                            elif gid == 'file_write':
+                                # Use workspace-aware version if path available
+                                if workspace_path:
+                                    node_tools.append(WorkspaceFileWriterTool(workspace_path=workspace_path))
+                                else:
+                                    node_tools.append(FileWriterTool())
+                            elif gid == 'directory_search':
+                                node_tools.append(DirectorySearchTool(directory=workspace_path))
+                            elif gid == 'pdf_search':
+                                node_tools.append(PDFSearchTool(config={'directory': workspace_path} if workspace_path else {}))
+                            elif gid == 'docx_search':
+                                node_tools.append(DOCXSearchTool(config={'directory': workspace_path} if workspace_path else {}))
+                            elif gid == 'json_search':
+                                node_tools.append(JSONSearchTool(config={'directory': workspace_path} if workspace_path else {}))
+                            elif gid == 'xml_search':
+                                node_tools.append(XMLSearchTool(config={'directory': workspace_path} if workspace_path else {}))
+                            elif gid == 'csv_search':
+                                node_tools.append(CSVSearchTool(config={'directory': workspace_path} if workspace_path else {}))
+                            elif gid == 'mdx_search':
+                                node_tools.append(MDXSearchTool(config={'directory': workspace_path} if workspace_path else {}))
+                            elif gid == 'txt_search':
+                                node_tools.append(TXTSearchTool(config={'directory': workspace_path} if workspace_path else {}))
+                            elif gid == 'ocr':
+                                node_tools.append(OCRTool())
+                            
+                            log_debug(f"Default tool '{gid}' added to {node_name}")
+                        except Exception as ge:
+                            log_debug(f"Failed to instantiate default tool '{gid}': {str(ge)}")
+
                     if include_mcp:
                         mcp_ids = getattr(node_data, 'mcpServerIds', []) or []
                         for mid in mcp_ids:
@@ -223,37 +463,59 @@ def run_crew_stream(graph_data: GraphData) -> Iterator[str]:
                                 "tool": tool,
                                 "BaseModel": BaseModel,
                                 "Field": Field,
-                                "os": os,
-                                "json": json
+                                "os": get_safe_os_module(workspace_path),
+                                "json": json,
+                                "Path": get_safe_pathlib(workspace_path),
+                                "open": get_safe_open(workspace_path),
+                                "Optional": typing.Optional,
+                                "Union": typing.Union,
+                                "List": typing.List,
+                                "Dict": typing.Dict,
+                                "Literal": getattr(typing, 'Literal', None), # Compatibility
+                                "WORKSPACE_PATH": workspace_path or "./"
                             }
-                            exec(tool_def.code, tool_namespace)
+                            log_debug(f"Injecting WORKSPACE_PATH: {workspace_path} into custom tool '{tool_def.name}'")
+                            
+                            # Use explicit globals and locals to ensure __annotations__ and other metadata are handled correctly
+                            tool_globals = tool_namespace
+                            tool_locals = {}
+                            
+                            exec(tool_def.code, tool_globals, tool_locals)
+                            
                             found_tool = None
                             
-                            for obj in tool_namespace.values():
+                            # Discovery: prioritiza o que foi definido (locals)
+                            # 1. Check for BaseTool instances
+                            for obj in tool_locals.values():
                                 if isinstance(obj, BaseTool):
                                     found_tool = obj
                                     break
                             
                             if not found_tool:
-                                for obj in tool_namespace.values():
+                                # 2. Check for decorated functions
+                                for obj in tool_locals.values():
                                     if callable(obj) and hasattr(obj, 'name') and not isinstance(obj, type):
                                         found_tool = obj
                                         break
-                            
+                                        
                             if not found_tool:
+                                # 3. Check for functions matching the tool name
                                 normalized_db_name = tool_def.name.lower().replace(" ", "_")
-                                for t_name, obj in tool_namespace.items():
+                                for t_name, obj in tool_locals.items():
                                     if callable(obj) and not isinstance(obj, type) and t_name.lower() == normalized_db_name:
                                         found_tool = tool(obj)
                                         break
-                                        
+                            
                             if not found_tool:
-                                for t_name, obj in tool_namespace.items():
-                                    if callable(obj) and not isinstance(obj, type) and t_name not in ["tool", "BaseModel", "Field", "os", "json"]:
+                                # 4. Fallback to any callable in locals that isn't one of our injected ones
+                                reserved_names = ["tool", "BaseModel", "Field", "os", "json", "Path", "Optional", "Union", "List", "Dict", "Literal"]
+                                for t_name, obj in tool_locals.items():
+                                    if callable(obj) and not isinstance(obj, type) and t_name not in reserved_names:
                                         found_tool = tool(obj)
                                         break
                             
                             if found_tool:
+                                wrap_tool_with_workspace_guard(found_tool, workspace_path)
                                 try:
                                     # Ensure metadata
                                     if not hasattr(found_tool, 'name') or not found_tool.name:
@@ -269,6 +531,11 @@ def run_crew_stream(graph_data: GraphData) -> Iterator[str]:
                                 log_debug(f"Error: No valid function or tool found in code for '{tool_def.name}'.")
                         except Exception as te:
                             log_debug(f"Failed to execute custom tool '{tool_def.name}' for {node_name}: {str(te)}")
+                    
+                    # Final guard for all resolved tools
+                    for t in node_tools:
+                        wrap_tool_with_workspace_guard(t, workspace_path)
+                            
                     return node_tools
 
                 agents_map: Dict[str, Agent] = {}
@@ -305,10 +572,13 @@ def run_crew_stream(graph_data: GraphData) -> Iterator[str]:
                                 if credential.provider: llm_params["provider"] = credential.provider
                                 agent_llm = LLM(**llm_params)
 
+                    # Injeção de Prompt: Força o Agente a respeitar o Workspace
+                    workspace_instruction = f"\n\nIMPORTANT: Your current working directory is '{workspace_path}'. All file operations MUST be relative to this path. Never write or read files outside of this directory."
+                    
                     agent = Agent(
                         role=role,
                         goal=goal,
-                        backstory=backstory,
+                        backstory=backstory + workspace_instruction,
                         verbose=True,
                         allow_delegation=False, 
                         step_callback=make_agent_step_callback(node.id),
@@ -350,8 +620,11 @@ def run_crew_stream(graph_data: GraphData) -> Iterator[str]:
                     # Resolve ferramentas da Task (Apenas Custom Tools, sem MCP para Tasks)
                     this_task_tools = resolve_node_tools(node.data, f"Task {task_name}", include_mcp=False)
                         
+                    # Injeção de Prompt na Task para reforçar o workspace
+                    workspace_task_instruction = f"\n\nNOTE: All files must be handled within the workspace: '{workspace_path}'."
+                    
                     task = Task(
-                        description=description,
+                        description=description + workspace_task_instruction,
                         expected_output=expected_output,
                         agent=agents_map[source_agent_id],
                         tools=this_task_tools,
