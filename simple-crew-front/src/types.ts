@@ -147,6 +147,7 @@ export interface AppState {
   addNodeWithAutoPosition: (type: 'agent' | 'task' | 'crew', data: any) => void;
   fetchProjects: () => Promise<void>;
   saveProject: (name: string, description?: string) => Promise<void>;
+  updateProjectMetadata: (id: string, name: string, description: string) => Promise<void>;
   loadProject: (projectId: string) => Promise<void>;
   deleteProject: (projectId: string) => Promise<void>;
   setActiveNode: (id: string | null) => void;
