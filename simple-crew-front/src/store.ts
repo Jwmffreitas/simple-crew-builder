@@ -129,6 +129,9 @@ export const useStore = create<AppState>((set, get) => ({
   isSaving: false,
   savedProjects: [],
   currentProjectId: null,
+  currentProjectName: null,
+  currentProjectDescription: null,
+  currentProjectWorkspaceId: null,
   nodeStatuses: {},
   nodeErrors: {},
   notification: null,
@@ -141,23 +144,54 @@ export const useStore = create<AppState>((set, get) => ({
   models: JSON.parse(localStorage.getItem('models') || '[]'),
   defaultModel: localStorage.getItem('default_model') || 'gpt-4o',
   
-  globalTools: JSON.parse(localStorage.getItem('global_tools') || JSON.stringify([
-    { id: 'serper', name: 'Google Search (Serper)', description: 'Search the web for real-time information.', isEnabled: false, requiresKey: true },
-    { id: 'scrape', name: 'Website Scraper', description: 'Extract clean content from any website URL.', isEnabled: false, requiresKey: false },
-    { id: 'file_read', name: 'File System Reader', description: 'Read local files from the workspace.', isEnabled: true, requiresKey: false },
+  globalTools: JSON.parse(localStorage.getItem('global_tools_v5') || JSON.stringify([
+    { id: 'serper', name: 'Google Search (Serper)', description: 'Search the web for real-time information.', isEnabled: false, requiresKey: true, category: 'Search' },
+    { id: 'scrape', name: 'Website Scraper', description: 'Extract clean content from any website URL.', isEnabled: false, requiresKey: false, category: 'Web' },
+    { id: 'directory_read', name: 'Directory Read', description: 'List all files within a directory.', isEnabled: false, requiresKey: false, category: 'Files & Documents' },
+    { id: 'file_read', name: 'File Read', description: 'Read the content of a specific file.', isEnabled: false, requiresKey: false, category: 'Files & Documents' },
+    { id: 'file_write', name: 'File Write', description: 'Write content to a specific file.', isEnabled: false, requiresKey: false, category: 'Files & Documents' },
+    { id: 'directory_search', name: 'Directory Search', description: 'Search for files within a directory pattern.', isEnabled: false, requiresKey: false, category: 'Files & Documents' },
+    { id: 'pdf_search', name: 'PDF Search', description: 'RAG search through PDF documents.', isEnabled: false, requiresKey: false, category: 'Files & Documents' },
+    { id: 'docx_search', name: 'Docx Search', description: 'RAG search through Word documents.', isEnabled: false, requiresKey: false, category: 'Files & Documents' },
+    { id: 'json_search', name: 'JSON Search', description: 'RAG search through JSON files.', isEnabled: false, requiresKey: false, category: 'Files & Documents' },
+    { id: 'xml_search', name: 'XML Search', description: 'RAG search through XML files.', isEnabled: false, requiresKey: false, category: 'Files & Documents' },
+    { id: 'csv_search', name: 'CSV Search', description: 'RAG search through CSV files.', isEnabled: false, requiresKey: false, category: 'Files & Documents' },
+    { id: 'mdx_search', name: 'MDX Search', description: 'RAG search through MDX files.', isEnabled: false, requiresKey: false, category: 'Files & Documents' },
+    { id: 'txt_search', name: 'TXT Search', description: 'RAG search through TXT files.', isEnabled: false, requiresKey: false, category: 'Files & Documents' },
+    { id: 'ocr', name: 'OCR Tool', description: 'Extract text from images (local or URL).', isEnabled: false, requiresKey: false, category: 'Files & Documents' },
   ])),
   customTools: [],
   mcpServers: [], // Will be fetched from backend
   systemAiModelId: null,
+  activeWorkspaceId: null,
+  workspaces: [],
+  isExplorerOpen: false,
+  currentExplorerWsId: null,
 
-  fetchSettings: async () => {
+  setIsSettingsOpen: (open) => set({ isSettingsOpen: open }),
+  setIsExplorerOpen: (open) => set({ isExplorerOpen: open }),
+  setCurrentExplorerWsId: (id) => set({ currentExplorerWsId: id }),
+
+  fetchWorkspaceFiles: async (wsId: string) => {
     try {
-      const response = await fetch('http://localhost:8000/api/v1/settings');
-      if (!response.ok) throw new Error('Failed to fetch settings');
-      const settings = await response.json();
-      set({ systemAiModelId: settings.system_ai_model_id });
-    } catch (error) {
-      console.error(error);
+      const response = await fetch(`http://localhost:8000/api/v1/workspaces/${wsId}/files`);
+      if (!response.ok) throw new Error('Failed to fetch workspace files');
+      return await response.json();
+    } catch (error: any) {
+      toast.error(error.message);
+      return [];
+    }
+  },
+
+  fetchFileContent: async (ws_id: string, path: string) => {
+    try {
+      const response = await fetch(`http://localhost:8000/api/v1/workspaces/${ws_id}/files/content?path=${encodeURIComponent(path)}`);
+      if (!response.ok) throw new Error('Failed to fetch file content');
+      const data = await response.json();
+      return data.content;
+    } catch (error: any) {
+      toast.error(error.message);
+      return '';
     }
   },
 
@@ -166,7 +200,6 @@ export const useStore = create<AppState>((set, get) => ({
       const response = await fetch('http://localhost:8000/api/v1/mcp-servers');
       if (!response.ok) throw new Error('Failed to fetch MCP servers');
       const servers = await response.json();
-      // Map backend snake_case to frontend camelCase
       const mappedServers = servers.map((s: any) => ({
         id: s.id,
         name: s.name,
@@ -193,8 +226,6 @@ export const useStore = create<AppState>((set, get) => ({
       console.error(error);
     }
   },
-
-  setIsSettingsOpen: (open) => set({ isSettingsOpen: open }),
   toggleTheme: () => {
     set((state) => {
       const newTheme = state.theme === 'light' ? 'dark' : 'light';
@@ -206,7 +237,7 @@ export const useStore = create<AppState>((set, get) => ({
   updateToolConfig: (id, config) => {
     set((state) => {
       const newTools = state.globalTools.map(t => t.id === id ? { ...t, ...config } : t);
-      localStorage.setItem('global_tools', JSON.stringify(newTools));
+      localStorage.setItem('global_tools_v5', JSON.stringify(newTools));
       return { globalTools: newTools };
     });
   },
@@ -338,14 +369,22 @@ export const useStore = create<AppState>((set, get) => ({
     const payload = {
       version: "1.0",
       nodes: state.nodes,
-      edges: state.edges
+      edges: state.edges,
+      globalTools: state.globalTools,
+      customTools: state.customTools,
+      mcpServers: state.mcpServers,
+      name: state.currentProjectName,
+      description: state.currentProjectDescription
     };
 
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'simple-crew-config.json';
+    const filename = state.currentProjectName 
+      ? `${state.currentProjectName.toLowerCase().replace(/ /g, '_')}-config.json` 
+      : 'simple-crew-config.json';
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -404,9 +443,27 @@ export const useStore = create<AppState>((set, get) => ({
         throw new Error("Invalid format");
       }
 
+      const globalMcp = get().mcpServers;
+      const projectMcp = data.mcpServers || [];
+      const mergedMcp = [...globalMcp];
+      projectMcp.forEach((p: any) => {
+        if (!mergedMcp.some(m => m.id === p.id)) mergedMcp.push(p);
+      });
+
+      const globalTools = get().customTools;
+      const projectTools = data.customTools || [];
+      const mergedTools = [...globalTools];
+      projectTools.forEach((p: any) => {
+        if (!mergedTools.some(m => m.id === p.id)) mergedTools.push(p);
+      });
+
       set({
         nodes: data.nodes,
         edges: data.edges,
+        customTools: mergedTools,
+        mcpServers: mergedMcp,
+        currentProjectName: data.name || null,
+        currentProjectDescription: data.description || null,
         isExecuting: false,
         activeNodeId: null,
         currentProjectId: null,
@@ -456,14 +513,58 @@ export const useStore = create<AppState>((set, get) => ({
     return isValid;
   },
   onNodesChange: (changes: NodeChange<AppNode>[]) => {
-    set({
-      nodes: applyNodeChanges(changes, get().nodes),
-    });
+    const { nodes } = get();
+    const nextNodes = applyNodeChanges(changes, nodes);
+    
+    // Se algum nó do tipo task foi removido, precisamos limpar o taskOrder dos agentes
+    const removedTaskIds = changes
+      .filter(c => c.type === 'remove')
+      .map(c => c.id);
+
+    if (removedTaskIds.length > 0) {
+      set({
+        nodes: nextNodes.map(node => {
+          if (node.type === 'agent') {
+            const taskOrder = (node.data as any).taskOrder || [];
+            const newTaskOrder = taskOrder.filter((id: string) => !removedTaskIds.includes(id));
+            if (newTaskOrder.length !== taskOrder.length) {
+                return { ...node, data: { ...node.data, taskOrder: newTaskOrder } };
+            }
+          }
+          return node;
+        })
+      });
+    } else {
+      set({ nodes: nextNodes });
+    }
   },
   onEdgesChange: (changes: EdgeChange[]) => {
-    set({
-      edges: applyEdgeChanges(changes, get().edges),
-    });
+    const { nodes, edges } = get();
+    const nextEdges = applyEdgeChanges(changes, edges);
+
+    const removedEdges = changes.filter(c => c.type === 'remove') as any[];
+    if (removedEdges.length > 0) {
+      let updatedNodes = [...nodes];
+      removedEdges.forEach(change => {
+        const edge = edges.find(e => e.id === change.id);
+        if (edge) {
+          const sourceNode = nodes.find(n => n.id === edge.source);
+          const targetNode = nodes.find(n => n.id === edge.target);
+          if (sourceNode?.type === 'agent' && targetNode?.type === 'task') {
+            updatedNodes = updatedNodes.map(node => {
+              if (node.id === sourceNode.id) {
+                const taskOrder = (node.data as any).taskOrder || [];
+                return { ...node, data: { ...node.data, taskOrder: taskOrder.filter((id: string) => id !== targetNode.id) } };
+              }
+              return node;
+            });
+          }
+        }
+      });
+      set({ nodes: updatedNodes, edges: nextEdges });
+    } else {
+      set({ edges: nextEdges });
+    }
   },
   setNodeStatus: (id, status) => {
     set((state) => {
@@ -524,7 +625,9 @@ export const useStore = create<AppState>((set, get) => ({
     const payload = {
       version: "1.0",
       nodes: state.nodes,
-      edges: state.edges
+      edges: state.edges,
+      globalTools: state.globalTools,
+      customTools: state.customTools
     };
 
     try {
@@ -532,10 +635,15 @@ export const useStore = create<AppState>((set, get) => ({
       const crewNode = state.nodes.find(n => n.type === 'crew');
       if (crewNode) state.setNodeStatus(crewNode.id, 'running');
 
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (state.currentProjectId) {
+        headers["X-Project-Id"] = state.currentProjectId;
+      }
+
       // 2. Chama backend passando a malha inteira do Canvas
       const response = await fetch("http://localhost:8000/api/v1/run-crew", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify(payload)
       });
 
@@ -681,22 +789,75 @@ export const useStore = create<AppState>((set, get) => ({
       // 3. Forçar o Type Custom Global
       const newConnection = { ...connection, type: 'deletable' };
 
+      // 4. Sincronizar taskOrder se for Agent -> Task
+      let nextNodes = state.nodes;
+      if (isAgentToTask) {
+        nextNodes = state.nodes.map(node => {
+          if (node.id === connection.source) {
+            const taskOrder = (node.data as any).taskOrder || [];
+            if (!taskOrder.includes(connection.target)) {
+               return { 
+                 ...node, 
+                 data: { ...node.data, taskOrder: [...taskOrder, connection.target] } 
+               } as AppNode;
+            }
+          }
+          return node;
+        });
+      }
+
       return {
+        nodes: nextNodes,
         edges: addEdge(newConnection, newEdges),
       };
     });
   },
   deleteEdge: (edgeId: string) => {
-    set((state) => ({
-      edges: state.edges.filter((edge) => edge.id !== edgeId),
-    }));
+    set((state) => {
+      const edge = state.edges.find(e => e.id === edgeId);
+      let updatedNodes = state.nodes;
+
+      if (edge) {
+        const sourceNode = state.nodes.find(n => n.id === edge.source);
+        const targetNode = state.nodes.find(n => n.id === edge.target);
+        if (sourceNode?.type === 'agent' && targetNode?.type === 'task') {
+          updatedNodes = state.nodes.map(node => {
+            if (node.id === sourceNode.id) {
+              const taskOrder = (node.data as any).taskOrder || [];
+              return { ...node, data: { ...node.data, taskOrder: taskOrder.filter((id: string) => id !== targetNode.id) } };
+            }
+            return node;
+          });
+        }
+      }
+
+      return {
+        nodes: updatedNodes,
+        edges: state.edges.filter((e) => e.id !== edgeId),
+      };
+    });
   },
   deleteNode: (nodeId: string) => {
-    set((state) => ({
-      nodes: state.nodes.filter((node) => node.id !== nodeId),
-      edges: state.edges.filter((edge) => edge.source !== nodeId && edge.target !== nodeId),
-      activeNodeId: state.activeNodeId === nodeId ? null : state.activeNodeId,
-    }));
+    set((state) => {
+      const nodeToDelete = state.nodes.find(n => n.id === nodeId);
+      let updatedNodes = state.nodes.filter((node) => node.id !== nodeId);
+
+      if (nodeToDelete?.type === 'task') {
+        updatedNodes = updatedNodes.map(node => {
+          if (node.type === 'agent') {
+            const taskOrder = (node.data as any).taskOrder || [];
+            return { ...node, data: { ...node.data, taskOrder: taskOrder.filter((id: string) => id !== nodeId) } };
+          }
+          return node;
+        });
+      }
+
+      return {
+        nodes: updatedNodes,
+        edges: state.edges.filter((edge) => edge.source !== nodeId && edge.target !== nodeId),
+        activeNodeId: state.activeNodeId === nodeId ? null : state.activeNodeId,
+      };
+    });
   },
   updateNodeData: (nodeId: string, data: Partial<any>) => {
     set({
@@ -714,14 +875,47 @@ export const useStore = create<AppState>((set, get) => ({
   loadProject: async (projectId: string) => {
     if (projectId === get().currentProjectId) return;
     try {
+      // Ensure all global resources are loaded to resolve names/options in nodes
+      await Promise.all([
+        get().fetchModels(),
+        get().fetchMCPServers(),
+        get().fetchCustomTools(),
+        get().fetchCredentials(),
+        get().fetchWorkspaces(),
+        get().fetchSettings()
+      ]);
+
       const response = await fetch(`http://localhost:8000/api/v1/projects/${projectId}`);
       if (!response.ok) throw new Error('Falha ao carregar projeto');
       const project = await response.json();
 
+      const canvas_data = project.canvas_data;
+
+      // Merge current global MCP servers with project-specific portable ones
+      const globalMcp = get().mcpServers;
+      const projectMcp = canvas_data.mcpServers || [];
+      const mergedMcp = [...globalMcp];
+      projectMcp.forEach((p: any) => {
+        if (!mergedMcp.some(m => m.id === p.id)) mergedMcp.push(p);
+      });
+
+      // Merge current global Custom Tools with project-specific portable ones
+      const globalTools = get().customTools;
+      const projectTools = canvas_data.customTools || [];
+      const mergedTools = [...globalTools];
+      projectTools.forEach((p: any) => {
+        if (!mergedTools.some(m => m.id === p.id)) mergedTools.push(p);
+      });
+
       set({
-        nodes: project.canvas_data.nodes,
-        edges: migrateEdges(project.canvas_data.edges || []),
+        nodes: canvas_data.nodes,
+        edges: migrateEdges(canvas_data.edges || []),
+        customTools: mergedTools,
+        mcpServers: mergedMcp,
         currentProjectId: project.id,
+        currentProjectName: project.name,
+        currentProjectDescription: project.description || '',
+        currentProjectWorkspaceId: project.workspace_id || null,
         nodeStatuses: {},
         nodeErrors: {}
       });
@@ -754,24 +948,24 @@ export const useStore = create<AppState>((set, get) => ({
       const payload = {
         name: nameByArg,
         description: description || "",
+        workspace_id: state.currentProjectWorkspaceId,
         canvas_data: {
           nodes: state.nodes,
           edges: state.edges,
           customTools: state.customTools,
+          globalTools: state.globalTools,
           version: "1.0"
         }
       };
 
       let response;
       if (state.currentProjectId) {
-        // PATCH
         response = await fetch(`http://localhost:8000/api/v1/projects/${state.currentProjectId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
       } else {
-        // POST
         response = await fetch('http://localhost:8000/api/v1/projects', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -782,7 +976,12 @@ export const useStore = create<AppState>((set, get) => ({
       if (!response.ok) throw new Error('Failed to save project');
       const saved = await response.json();
 
-      set({ currentProjectId: saved.id });
+      set({ 
+        currentProjectId: saved.id,
+        currentProjectName: saved.name,
+        currentProjectDescription: saved.description,
+        currentProjectWorkspaceId: saved.workspace_id || null
+      });
       await state.fetchProjects();
       toast.success(state.currentProjectId ? "Project updated!" : "Project created successfully!");
     } catch (error: any) {
@@ -800,7 +999,7 @@ export const useStore = create<AppState>((set, get) => ({
       if (!response.ok) throw new Error('Failed to delete project');
 
       if (get().currentProjectId === projectId) {
-        set({ currentProjectId: null });
+        get().resetProject();
       }
 
       await get().fetchProjects();
@@ -809,11 +1008,13 @@ export const useStore = create<AppState>((set, get) => ({
       toast.error(error.message);
     }
   },
+
   addNode: (node: AppNode) => {
     set({
       nodes: [...get().nodes, node],
     });
   },
+
   addNodeWithAutoPosition: (type: 'agent' | 'task' | 'crew', data: any) => {
     const state = get();
     const existingNodes = state.nodes;
@@ -821,11 +1022,10 @@ export const useStore = create<AppState>((set, get) => ({
     // Grid configuration
     const startX = 600;
     const startY = 100;
-    const spacingX = 350; // Increased spacing for cards (w-56 = 224px)
-    const spacingY = 220; // Increased height spacing
+    const spacingX = 350; 
+    const spacingY = 220; 
     const nodesPerRow = 3;
 
-    // We count all nodes to determine the grid position to avoid overlaps
     const gridIndex = existingNodes.length;
     
     const row = Math.floor(gridIndex / nodesPerRow);
@@ -849,21 +1049,20 @@ export const useStore = create<AppState>((set, get) => ({
     
     state.validateGraph();
   },
+
   toggleCollapse: (nodeId: string) => {
     set((state) => {
       const node = state.nodes.find((n) => n.id === nodeId);
       if (!node) return {};
 
       const currentlyCollapsed = (node.data as any).isCollapsed ?? false;
-      const willCollapse = !currentlyCollapsed; // Se era false, agora vai colapsar (true)
+      const willCollapse = !currentlyCollapsed;
 
       let descendantIds: string[] = [];
 
       if (willCollapse) {
-        // Vai colapsar (Esconder). Pega todos os filhos de todos os níveis.
         descendantIds = getDescendantsToHide(nodeId, state.edges);
       } else {
-        // Vai expandir (Mostrar). Pega filhos, mas para se encontrar um filho que também tá colapsado.
         descendantIds = getDescendantsToShow(nodeId, state.nodes, state.edges);
       }
 
@@ -880,7 +1079,6 @@ export const useStore = create<AppState>((set, get) => ({
       });
 
       const updatedEdges = state.edges.map((edge) => {
-        // Se a aresta tem como source O ALVO ou como source algum descendente afetado
         const isAffectedEdge = edge.source === nodeId || descendantSet.has(edge.source) || descendantSet.has(edge.target);
 
         if (isAffectedEdge) {
@@ -892,6 +1090,7 @@ export const useStore = create<AppState>((set, get) => ({
       return { nodes: updatedNodes, edges: updatedEdges };
     });
   },
+
   updateCrewAgentOrder: (crewId: string, newOrder: string[]) => {
     set((state) => ({
       nodes: state.nodes.map((node) => {
@@ -908,6 +1107,7 @@ export const useStore = create<AppState>((set, get) => ({
       }),
     }));
   },
+
   updateAgentTaskOrder: (agentId: string, newOrder: string[]) => {
     set((state) => ({
       nodes: state.nodes.map((node) => {
@@ -924,11 +1124,15 @@ export const useStore = create<AppState>((set, get) => ({
       }),
     }));
   },
+
   resetProject: () => {
     set({
       nodes: [],
       edges: [],
       currentProjectId: null,
+      currentProjectName: null,
+      currentProjectDescription: null,
+      currentProjectWorkspaceId: null,
       nodeStatuses: {},
       nodeErrors: {},
       executionResult: null
@@ -963,6 +1167,7 @@ export const useStore = create<AppState>((set, get) => ({
       toast.error("Error duplicating project");
     }
   },
+
   createNewProject: async (name: string, description: string) => {
     const payload = {
       name,
@@ -987,6 +1192,9 @@ export const useStore = create<AppState>((set, get) => ({
       set((state) => ({
         savedProjects: [...state.savedProjects, saved],
         currentProjectId: saved.id,
+        currentProjectName: saved.name,
+        currentProjectDescription: saved.description,
+        currentProjectWorkspaceId: saved.workspace_id || null,
         nodes: saved.canvas_data.nodes,
         edges: saved.canvas_data.edges,
       }));
@@ -997,6 +1205,175 @@ export const useStore = create<AppState>((set, get) => ({
       return null;
     }
   },
+
+  importProjectJsonAndSave: async (data: any) => {
+    try {
+      if (!data || !Array.isArray(data.nodes) || !Array.isArray(data.edges)) {
+        throw new Error("Invalid format");
+      }
+
+      const payload = {
+        name: data.name || "Imported Workflow",
+        description: data.description || "",
+        canvas_data: {
+          nodes: data.nodes,
+          edges: data.edges,
+          customTools: data.customTools || [],
+          mcpServers: data.mcpServers || [],
+          version: data.version || "1.0"
+        }
+      };
+
+      const response = await fetch('http://localhost:8000/api/v1/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) throw new Error('Failed to create project from JSON');
+      const saved = await response.json();
+
+      set((state) => ({
+        savedProjects: [...state.savedProjects, saved]
+      }));
+
+      toast.success("Workflow imported successfully!");
+      return saved;
+    } catch (error: any) {
+      toast.error(error.message);
+      return null;
+    }
+  },
+
+  updateProjectWorkspaceId: (workspaceId: string | null) => {
+    set({ currentProjectWorkspaceId: workspaceId });
+  },
+
+  fetchWorkspaces: async () => {
+    try {
+      const response = await fetch('http://localhost:8000/api/v1/workspaces');
+      if (!response.ok) throw new Error('Failed to fetch workspaces');
+      const workspaces = await response.json();
+      set({ workspaces });
+    } catch (error: any) {
+      console.error("Fetch workspaces error:", error);
+    }
+  },
+
+  addWorkspace: async (workspace) => {
+    try {
+      const response = await fetch('http://localhost:8000/api/v1/workspaces', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(workspace),
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.detail || 'Failed to create workspace');
+      }
+      
+      toast.success("Workspace created successfully");
+      await get().fetchWorkspaces();
+    } catch (error: any) {
+      toast.error(error.message);
+    }
+  },
+
+  updateWorkspace: async (id, workspace) => {
+    try {
+      const response = await fetch(`http://localhost:8000/api/v1/workspaces/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(workspace),
+      });
+
+      if (!response.ok) throw new Error('Failed to update workspace');
+      
+      toast.success("Workspace updated successfully");
+      await get().fetchWorkspaces();
+    } catch (error: any) {
+      toast.error(error.message);
+    }
+  },
+
+  deleteWorkspace: async (id: string) => {
+    try {
+      const response = await fetch(`http://localhost:8000/api/v1/workspaces/${id}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.detail || 'Failed to delete workspace');
+      }
+
+      const { activeWorkspaceId, currentProjectWorkspaceId, fetchWorkspaces, fetchSettings } = get();
+      
+      if (activeWorkspaceId === id) {
+        set({ activeWorkspaceId: null });
+        await fetchSettings();
+      }
+
+      if (currentProjectWorkspaceId === id) {
+        set({ currentProjectWorkspaceId: null });
+      }
+
+      toast.success("Workspace deleted successfully");
+      await fetchWorkspaces();
+    } catch (error: any) {
+      toast.error(error.message);
+    }
+  },
+
+  openWorkspace: async (id: string) => {
+    try {
+      const response = await fetch(`http://localhost:8000/api/v1/workspaces/${id}/open`, {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.detail || 'Failed to open workspace');
+      }
+
+      toast.success("Opening workspace folder...");
+    } catch (error: any) {
+      toast.error(error.message);
+    }
+  },
+
+  fetchSettings: async () => {
+    try {
+      const response = await fetch('http://localhost:8000/api/v1/settings');
+      if (!response.ok) throw new Error('Failed to fetch settings');
+      const settings = await response.json();
+      set({ 
+        activeWorkspaceId: settings.active_workspace_id,
+        systemAiModelId: settings.system_ai_model_id
+      });
+    } catch (error) {
+      console.error("Error fetching settings:", error);
+      throw error;
+    }
+  },
+
+  downloadWorkspaceZip: async (wsId: string, path: string = "") => {
+    try {
+      const url = `http://localhost:8000/api/v1/workspaces/${wsId}/download-zip?path=${encodeURIComponent(path)}`;
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', '');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast.success("Starting zip download... 📦");
+    } catch (error: any) {
+      console.error("Error downloading zip:", error);
+      toast.error("Failed to download ZIP.");
+    }
+  },
+
   updateProjectMetadata: async (id: string, name: string, description: string) => {
     try {
       const response = await fetch(`http://localhost:8000/api/v1/projects/${id}`, {
@@ -1008,12 +1385,14 @@ export const useStore = create<AppState>((set, get) => ({
       if (!response.ok) throw new Error('Failed to update project metadata');
 
       toast.success("Project updated successfully");
+      set({ currentProjectName: name, currentProjectDescription: description });
       await get().fetchProjects();
     } catch (error: any) {
       console.error("Update project metadata error:", error);
       toast.error("Error updating project");
     }
   },
+
   fetchCredentials: async () => {
     try {
       const response = await fetch('http://localhost:8000/api/v1/credentials');
@@ -1024,6 +1403,7 @@ export const useStore = create<AppState>((set, get) => ({
       console.error("Fetch credentials error:", error);
     }
   },
+
   addCredential: async (cred) => {
     try {
       const response = await fetch('http://localhost:8000/api/v1/credentials', {
@@ -1041,6 +1421,7 @@ export const useStore = create<AppState>((set, get) => ({
       toast.error("Error adding credential");
     }
   },
+
   deleteCredential: async (id) => {
     try {
       const response = await fetch(`http://localhost:8000/api/v1/credentials/${id}`, {
@@ -1056,6 +1437,7 @@ export const useStore = create<AppState>((set, get) => ({
       toast.error("Error deleting credential");
     }
   },
+
   fetchModels: async () => {
     try {
       const response = await fetch('http://localhost:8000/api/v1/models');
@@ -1080,6 +1462,7 @@ export const useStore = create<AppState>((set, get) => ({
       console.error("Fetch models error:", error);
     }
   },
+
   duplicateModel: (id) => {
     const original = get().models.find(m => m.id === id);
     if (!original) return;
@@ -1087,11 +1470,12 @@ export const useStore = create<AppState>((set, get) => ({
     const copy: Omit<ModelConfig, 'id'> = {
       ...original,
       name: `${original.name} (Copy)`,
-      isDefault: false // Nunca duplica como default por segurança
+      isDefault: false 
     };
 
     get().addModel(copy);
   },
+
   addModel: async (modelConfig) => {
     const modelData = {
       name: modelConfig.name,
@@ -1112,19 +1496,16 @@ export const useStore = create<AppState>((set, get) => ({
         body: JSON.stringify(modelData),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error("Add model error response:", errorData);
-        throw new Error('Failed to add model');
-      }
+      if (!response.ok) throw new Error('Failed to add model');
 
-      get().showNotification("Model added successfully", "success");
+      toast.success("Model added successfully");
       await get().fetchModels();
     } catch (error: any) {
       console.error("Add model error:", error);
-      get().showNotification("Error adding model. Check console for details.", "error");
+      toast.error("Error adding model");
     }
   },
+
   updateModel: async (id, modelUpdate) => {
     const mappedUpdate: any = {};
     if (modelUpdate.name !== undefined) mappedUpdate.name = modelUpdate.name;
@@ -1144,19 +1525,16 @@ export const useStore = create<AppState>((set, get) => ({
         body: JSON.stringify(mappedUpdate),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error("Update model error response:", errorData);
-        throw new Error('Failed to update model');
-      }
+      if (!response.ok) throw new Error('Failed to update model');
 
-      get().showNotification("Model updated successfully", "success");
+      toast.success("Model updated successfully");
       await get().fetchModels();
     } catch (error: any) {
       console.error("Update model error:", error);
-      get().showNotification("Error updating model", "error");
+      toast.error("Error updating model");
     }
   },
+
   deleteModel: async (id) => {
     try {
       const response = await fetch(`http://localhost:8000/api/v1/models/${id}`, {
@@ -1172,6 +1550,7 @@ export const useStore = create<AppState>((set, get) => ({
       toast.error("Error deleting model");
     }
   },
+
   setDefaultModelConfig: async (id) => {
     try {
       const response = await fetch(`http://localhost:8000/api/v1/models/${id}/set-default`, {
@@ -1187,31 +1566,16 @@ export const useStore = create<AppState>((set, get) => ({
       toast.error("Error updating default model");
     }
   },
+
   setDefaultModel: (model: string) => {
     localStorage.setItem('default_model', model);
     set({ defaultModel: model });
   },
 
-  setSystemAiModelId: async (id: string | null) => {
-    try {
-      const response = await fetch('http://localhost:8000/api/v1/settings', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ system_ai_model_id: id })
-      });
-      if (!response.ok) throw new Error('Failed to update settings');
-      const settings = await response.json();
-      set({ systemAiModelId: settings.system_ai_model_id });
-      toast.success('System AI updated!');
-    } catch (error: any) {
-      toast.error(error.message);
-    }
-  },
-
   suggestAiContent: async (nodeId, field) => {
     const { nodes, updateNodeData } = get();
     const agentNode = nodes.find(n => n.id === nodeId);
-    if (!agentNode) return null;
+    if (!agentNode) return;
 
     const crewNode = nodes.find(n => n.type === 'crew');
     const workflowName = (crewNode?.data as any)?.name || 'SimpleCrew Workflow';
@@ -1234,10 +1598,8 @@ export const useStore = create<AppState>((set, get) => ({
       const data = await response.json();
       
       updateNodeData(nodeId, { [field]: data.suggestion });
-      return data.suggestion;
     } catch (error: any) {
       toast.error(`AI Error: ${error.message}`);
-      return null;
     }
   },
 
@@ -1290,7 +1652,6 @@ export const useStore = create<AppState>((set, get) => ({
     const workflowName = (crewNode?.data as any)?.name || 'SimpleCrew Workflow';
     const workflowDescription = (crewNode?.data as any)?.description || '';
 
-    // Find assigned agent name if any
     const agentNode = nodes.find(n => n.type === 'agent' && (n.data as any).taskIds?.includes(nodeId));
     const agentName = (agentNode?.data as any)?.name;
 
@@ -1322,5 +1683,31 @@ export const useStore = create<AppState>((set, get) => ({
     } catch (error: any) {
       toast.error(error.message);
     }
-  }
+  },
+
+  setActiveWorkspaceId: (id: string | null) => set({ activeWorkspaceId: id }),
+  setSystemAiModelId: (id: string | null) => {
+    set({ systemAiModelId: id });
+    get().updateSettings({ system_ai_model_id: id });
+  },
+  
+  updateSettings: async (settings) => {
+    try {
+      const response = await fetch('http://localhost:8000/api/v1/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings),
+      });
+      if (!response.ok) throw new Error('Failed to update settings');
+      const updated = await response.json();
+      set({ 
+        activeWorkspaceId: updated.active_workspace_id,
+        systemAiModelId: updated.system_ai_model_id
+      });
+      toast.success("Settings updated");
+    } catch (error: any) {
+      toast.error(error.message);
+    }
+  },
 }));
+

@@ -49,7 +49,7 @@ def extract_placeholders(text: str) -> List[str]:
         return []
     return re.findall(r'\{([a-zA-Z0-9_]+)\}', text)
 
-def generate_python_project(graph_data: GraphData, project_name: str, author_name: str = "SimpleCrew", author_email: str = "admin@simplecrew.ai", mcp_servers: List[Dict[str, Any]] = None, project_description: str = "", agent_llms: Dict[str, Dict[str, Any]] = None, providers: List[str] = None) -> bytes:
+def generate_python_project(graph_data: GraphData, project_name: str, author_name: str = "SimpleCrew", author_email: str = "admin@simplecrew.ai", mcp_servers: List[Dict[str, Any]] = None, project_description: str = "", agent_llms: Dict[str, Dict[str, Any]] = None, providers: List[str] = None, workspace_path: str = None) -> bytes:
     """
     Transforma GraphData em um arquivo ZIP contendo um projeto CrewAI completo.
     """
@@ -77,9 +77,22 @@ def generate_python_project(graph_data: GraphData, project_name: str, author_nam
         if "groq" in providers:
             env_lines.append("GROQ_API_KEY=your_groq_api_key_here")
             needed_keys.append("GROQ_API_KEY")
-            
+        
+        # Default Tools Keys
+        if graph_data.globalTools:
+            for tool in graph_data.globalTools:
+                if tool.requiresKey and tool.apiKey:
+                    env_key = f"{tool.id.upper()}_API_KEY"
+                    if tool.id == 'serper':
+                        env_key = "SERPER_API_KEY"
+                    env_lines.append(f"{env_key}={tool.apiKey}")
+                    needed_keys.append(env_key)
+
         env_content = "\n".join(env_lines) + "\n"
         zip_file.writestr(f"{folder_name}/.env", env_content)
+
+        # 1.5 Workspace Directory
+        zip_file.writestr(f"{folder_name}/workspace/.gitkeep", "") # Create empty workspace dir
 
         # 2. pyproject.toml
         pyproject_content = f"""[project]
@@ -163,12 +176,77 @@ Gerado com ❤️ por **Simple Crew Builder**
 """
         zip_file.writestr(f"{folder_name}/README.md", readme_content)
 
-        # 4. Prepare data for YAMLs and Python
+        # 4. Prepare data for YAMLs and Python (Sorted by Visual Hierarchy)
         nodes = {node.id: node for node in graph_data.nodes}
         
-        agent_nodes = [n for n in graph_data.nodes if n.type == 'agent']
-        task_nodes = [n for n in graph_data.nodes if n.type == 'task']
+        all_agent_nodes = [n for n in graph_data.nodes if n.type == 'agent']
+        all_task_nodes = [n for n in graph_data.nodes if n.type == 'task']
         crew_node = next((n for n in graph_data.nodes if n.type == 'crew'), None)
+
+        # --- ORDENAÇÃO À PROVA DE BALAS (Sincronizada com crew_builder.py) ---
+        
+        # 1. Ordem dos Agentes (Hereditário da Crew)
+        agent_order_hint = getattr(crew_node.data, 'agentOrder', []) if crew_node else []
+        agent_ids_set = {n.id for n in all_agent_nodes}
+        
+        ordered_agent_ids = [aid for aid in agent_order_hint if aid in agent_ids_set]
+        # Agentes que escaparam do agentOrder
+        ordered_agent_ids.extend([n.id for n in all_agent_nodes if n.id not in set(ordered_agent_ids)])
+        
+        agent_nodes = [nodes[aid] for aid in ordered_agent_ids if aid in nodes]
+
+        # 2. Agrupa as tasks por agente lendo as edges
+        agent_to_tasks = {aid: [] for aid in ordered_agent_ids}
+        for edge in graph_data.edges:
+            if edge.source in agent_ids_set and nodes.get(edge.target) and nodes[edge.target].type == 'task':
+                if edge.source in agent_to_tasks:
+                    agent_to_tasks[edge.source].append(edge.target)
+        
+        base_task_queue = []
+        for aid in ordered_agent_ids:
+            tasks_of_agent = agent_to_tasks.get(aid, [])
+            ag_node = nodes.get(aid)
+            ag_task_order = getattr(ag_node.data, 'taskOrder', []) if ag_node else []
+            
+            # Prioridade para o taskOrder (ordem visual no card)
+            for tid in ag_task_order:
+                if tid in tasks_of_agent and tid not in base_task_queue:
+                    base_task_queue.append(tid)
+            # Tasks conectadas mas sem ordem explícita
+            for tid in tasks_of_agent:
+                if tid not in base_task_queue:
+                    base_task_queue.append(tid)
+        
+        # Tasks órfãs (segurança)
+        for n in all_task_nodes:
+            if n.id not in base_task_queue:
+                base_task_queue.append(n.id)
+        
+        # 3. Resolução de Grafo (Context Dependencies)
+        final_task_ids_ordered = []
+        visited = set()
+        visiting = set()
+
+        def resolve_task_dependencies(tid):
+            if tid in visiting: return # Cycle protection
+            if tid in visited: return
+            visiting.add(tid)
+            
+            t_node = nodes.get(tid)
+            if t_node:
+                # Pre-requisitos (context) devem vir antes
+                context_ids = getattr(t_node.data, 'context', []) or []
+                for cid in context_ids:
+                    resolve_task_dependencies(cid)
+                
+                final_task_ids_ordered.append(tid)
+                visited.add(tid)
+            visiting.remove(tid)
+
+        for tid in base_task_queue:
+            resolve_task_dependencies(tid)
+        
+        task_nodes = [nodes[tid] for tid in final_task_ids_ordered if tid in nodes]
 
         package_path = f"{folder_name}/src/{folder_name}"
 
@@ -209,9 +287,19 @@ Gerado com ❤️ por **Simple Crew Builder**
                 if not has_decorator:
                     # Apply decorator with name from DB
                     name_for_decorator = tool_data.name.lower().replace(" ", "_")
-                    tool_file_content += f'@tool("{name_for_decorator}")\n'
-                
-                tool_file_content += tool_data.code + "\n"
+                    # Localiza o primeiro 'def' ou 'class' para inserir o decorator logo antes dele
+                    # Capturamos a indentação horizontal existente ([ \t]*)
+                    match = re.search(r'^([ \t]*)(?:def|class)\s+', tool_data.code, re.MULTILINE)
+                    if match:
+                        indent = match.group(1)
+                        decorator_code = f'{indent}@tool("{name_for_decorator}")\n'
+                        start_pos = match.start()
+                        tool_code_modified = tool_data.code[:start_pos] + decorator_code + tool_data.code[start_pos:]
+                        tool_file_content += tool_code_modified + "\n"
+                    else:
+                        tool_file_content += f'@tool("{name_for_decorator}")\n' + tool_data.code + "\n"
+                else:
+                    tool_file_content += tool_data.code + "\n"
                 
                 zip_file.writestr(f"{tools_package_path}/{tool_slug}.py", tool_file_content)
 
@@ -235,10 +323,13 @@ Gerado com ❤️ por **Simple Crew Builder**
             all_placeholders.update(extract_placeholders(goal))
             all_placeholders.update(extract_placeholders(backstory))
 
+            # Exporter: Força o Agente a respeitar o Workspace (Caminho relativo padronizado para o export)
+            workspace_instruction = "\n\nIMPORTANT: Your current working directory is './workspace'. All file operations MUST be relative to this path. Never write or read files outside of this directory."
+            
             agent_data = {
                 "role": BlockStr(role + "\n"),
                 "goal": BlockStr(goal + "\n"),
-                "backstory": BlockStr(backstory + "\n")
+                "backstory": BlockStr(backstory + workspace_instruction + "\n")
             }
             
             # Add LLM config if available
@@ -276,8 +367,11 @@ Gerado com ❤️ por **Simple Crew Builder**
                 agent_node = nodes[agent_id]
                 agent_key = to_snake_case(agent_node.data.name) if agent_node.data.name else f"agent_{agent_id[:8]}"
 
+            # Exporter: Injeção de Prompt na Task
+            workspace_task_instruction = "\n\nNOTE: All files must be handled within the workspace: './workspace'."
+            
             tasks_yaml_data[task_key] = {
-                "description": BlockStr(description + "\n"),
+                "description": BlockStr(description + workspace_task_instruction + "\n"),
                 "expected_output": BlockStr(expected_output + "\n"),
                 "agent": agent_key # Keys and references stay plain
             }
@@ -294,7 +388,16 @@ Gerado com ❤️ por **Simple Crew Builder**
 
         # 8. src/{folder_name}/crew.py
         class_name = f"{folder_name.title().replace('_', '')}Crew"
-        crew_py_content = generate_crew_py(agent_nodes, task_nodes, crew_node, graph_data.edges, nodes, class_name, custom_tools_dict)
+        crew_py_content = generate_crew_py(
+            agent_nodes, 
+            task_nodes, 
+            crew_node, 
+            graph_data.edges, 
+            nodes, 
+            class_name, 
+            custom_tools_dict,
+            graph_data.globalTools
+        )
         zip_file.writestr(f"{package_path}/crew.py", crew_py_content)
 
         # 9. src/{folder_name}/main.py
@@ -348,10 +451,12 @@ if __name__ == "__main__":
 
     return buffer.getvalue()
 
-def generate_crew_py(agent_nodes, task_nodes, crew_node, edges, nodes, class_name, custom_tools_dict=None) -> str:
+def generate_crew_py(agent_nodes, task_nodes, crew_node, edges, nodes, class_name, custom_tools_dict=None, global_tools_config=None) -> str:
     agents_methods = ""
     needed_tools_imports = []
+    needed_crewai_tools = {"FileReadTool", "FileWriterTool"}
     
+    global_configs = {t.id: t for t in (global_tools_config or [])}
     for node in agent_nodes:
         agent_key = to_snake_case(node.data.name) if node.data.name else f"agent_{node.id[:8]}"
         method_name = agent_key
@@ -362,6 +467,56 @@ def generate_crew_py(agent_nodes, task_nodes, crew_node, edges, nodes, class_nam
         
         tools_list = []
         tools_code = ""
+
+        # Setup Default Tools (globalTools)
+        global_ids = getattr(node.data, 'globalToolIds', []) or []
+        for gid in global_ids:
+            config = global_configs.get(gid)
+            if not config or not config.isEnabled:
+                continue
+            
+            if gid == 'serper':
+                tools_list.append("SerperDevTool()")
+                needed_crewai_tools.add("SerperDevTool")
+            elif gid == 'scrape':
+                tools_list.append("ScrapeWebsiteTool()")
+                needed_crewai_tools.add("ScrapeWebsiteTool")
+            elif gid == 'directory_read':
+                tools_list.append("DirectoryReadTool(directory='./workspace')")
+                needed_crewai_tools.add("DirectoryReadTool")
+            elif gid == 'file_read':
+                tools_list.append("WorkspaceFileReadTool(workspace_path='./workspace')")
+                needed_crewai_tools.add("FileReadTool")
+            elif gid == 'file_write':
+                tools_list.append("WorkspaceFileWriterTool(workspace_path='./workspace')")
+                needed_crewai_tools.add("FileWriterTool")
+            elif gid == 'directory_search':
+                tools_list.append("DirectorySearchTool(directory='./workspace')")
+                needed_crewai_tools.add("DirectorySearchTool")
+            elif gid == 'pdf_search':
+                tools_list.append("PDFSearchTool(config={'directory': './workspace'})")
+                needed_crewai_tools.add("PDFSearchTool")
+            elif gid == 'docx_search':
+                tools_list.append("DOCXSearchTool(config={'directory': './workspace'})")
+                needed_crewai_tools.add("DOCXSearchTool")
+            elif gid == 'json_search':
+                tools_list.append("JSONSearchTool(config={'directory': './workspace'})")
+                needed_crewai_tools.add("JSONSearchTool")
+            elif gid == 'xml_search':
+                tools_list.append("XMLSearchTool(config={'directory': './workspace'})")
+                needed_crewai_tools.add("XMLSearchTool")
+            elif gid == 'csv_search':
+                tools_list.append("CSVSearchTool(config={'directory': './workspace'})")
+                needed_crewai_tools.add("CSVSearchTool")
+            elif gid == 'mdx_search':
+                tools_list.append("MDXSearchTool(config={'directory': './workspace'})")
+                needed_crewai_tools.add("MDXSearchTool")
+            elif gid == 'txt_search':
+                tools_list.append("TXTSearchTool(config={'directory': './workspace'})")
+                needed_crewai_tools.add("TXTSearchTool")
+            elif gid == 'ocr':
+                tools_list.append("OCRTool()")
+                needed_crewai_tools.add("OCRTool")
 
         # Setup MCP tools
         if mcp_ids:
@@ -401,9 +556,56 @@ def generate_crew_py(agent_nodes, task_nodes, crew_node, edges, nodes, class_nam
         task_key = to_snake_case(node.data.name) if node.data.name else f"task_{node.id[:8]}"
         method_name = task_key
         
-        # Tools (Custom Tools only for Tasks)
-        custom_tool_ids = getattr(node.data, 'customToolIds', []) or []
+        # Tools (Default/Official)
+        global_tool_ids = getattr(node.data, 'globalToolIds', []) or []
         task_tools_list = []
+        
+        for gid in global_tool_ids:
+            if gid == 'serper':
+                task_tools_list.append("SerperDevTool()")
+                needed_crewai_tools.add("SerperDevTool")
+            elif gid == 'scrape':
+                task_tools_list.append("ScrapeWebsiteTool()")
+                needed_crewai_tools.add("ScrapeWebsiteTool")
+            elif gid == 'directory_read':
+                task_tools_list.append("DirectoryReadTool(directory='./workspace')")
+                needed_crewai_tools.add("DirectoryReadTool")
+            elif gid == 'file_read':
+                task_tools_list.append("WorkspaceFileReadTool(workspace_path='./workspace')")
+                needed_crewai_tools.add("FileReadTool")
+            elif gid == 'file_write':
+                task_tools_list.append("WorkspaceFileWriterTool(workspace_path='./workspace')")
+                needed_crewai_tools.add("FileWriterTool")
+            elif gid == 'directory_search':
+                task_tools_list.append("DirectorySearchTool(directory='./workspace')")
+                needed_crewai_tools.add("DirectorySearchTool")
+            elif gid == 'pdf_search':
+                task_tools_list.append("PDFSearchTool(config={'directory': './workspace'})")
+                needed_crewai_tools.add("PDFSearchTool")
+            elif gid == 'docx_search':
+                task_tools_list.append("DOCXSearchTool(config={'directory': './workspace'})")
+                needed_crewai_tools.add("DOCXSearchTool")
+            elif gid == 'json_search':
+                task_tools_list.append("JSONSearchTool(config={'directory': './workspace'})")
+                needed_crewai_tools.add("JSONSearchTool")
+            elif gid == 'xml_search':
+                task_tools_list.append("XMLSearchTool(config={'directory': './workspace'})")
+                needed_crewai_tools.add("XMLSearchTool")
+            elif gid == 'csv_search':
+                task_tools_list.append("CSVSearchTool(config={'directory': './workspace'})")
+                needed_crewai_tools.add("CSVSearchTool")
+            elif gid == 'mdx_search':
+                task_tools_list.append("MDXSearchTool(config={'directory': './workspace'})")
+                needed_crewai_tools.add("MDXSearchTool")
+            elif gid == 'txt_search':
+                task_tools_list.append("TXTSearchTool(config={'directory': './workspace'})")
+                needed_crewai_tools.add("TXTSearchTool")
+            elif gid == 'ocr':
+                task_tools_list.append("OCRTool()")
+                needed_crewai_tools.add("OCRTool")
+
+        # Custom Tools
+        custom_tool_ids = getattr(node.data, 'customToolIds', []) or []
         
         if custom_tool_ids and custom_tools_dict:
             for cid in custom_tool_ids:
@@ -452,8 +654,41 @@ def generate_crew_py(agent_nodes, task_nodes, crew_node, edges, nodes, class_nam
         for slug, func in needed_tools_imports:
             tools_import += f"\nfrom .tools.{slug} import {func}"
 
+    crewai_tools_import = ""
+    if needed_crewai_tools:
+        crewai_tools_import = f"\nfrom crewai_tools import {', '.join(sorted(list(needed_crewai_tools)))}"
+
     content = f"""from crewai import Agent, Crew, Process, Task
-from crewai.project import CrewBase, agent, crew, task{tools_import}
+from crewai.project import CrewBase, agent, crew, task{crewai_tools_import}{tools_import}
+from pydantic import Field
+import os
+from typing import Any
+
+# --- WORKSPACE AWARE FILE TOOLS ---
+class WorkspaceFileReadTool(FileReadTool):
+    workspace_path: str = Field(..., description="The root path of the workspace")
+    
+    def _run(self, **kwargs: Any) -> str:
+        file_path = kwargs.get('file_path') or self.file_path
+        if file_path:
+            abs_workspace = os.path.abspath(self.workspace_path)
+            if not os.path.isabs(file_path):
+                file_path = os.path.join(abs_workspace, file_path)
+            kwargs['file_path'] = file_path
+        return super()._run(**kwargs)
+
+class WorkspaceFileWriterTool(FileWriterTool):
+    workspace_path: str = Field(..., description="The root path of the workspace")
+    
+    def _run(self, **kwargs: Any) -> str:
+        requested_dir = kwargs.get('directory')
+        abs_workspace = os.path.abspath(self.workspace_path)
+        if not requested_dir or not os.path.isabs(requested_dir):
+            if not requested_dir or requested_dir == "./":
+                kwargs['directory'] = abs_workspace
+            else:
+                kwargs['directory'] = os.path.join(abs_workspace, requested_dir.lstrip('./\\\\'))
+        return super()._run(**kwargs)
 
 @CrewBase
 class {class_name}():

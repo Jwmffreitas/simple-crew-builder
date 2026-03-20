@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useMemo, useEffect } from 'react';
+import React, { useCallback, useRef, useEffect } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { ReactFlow, Background, Controls, MiniMap, ReactFlowProvider, useReactFlow, BackgroundVariant } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -18,6 +18,7 @@ import { ExportDropdown } from '../components/ExportDropdown';
 import { Toast } from '../components/Toast';
 import { ConsoleDrawer } from '../components/ConsoleDrawer';
 import { SettingsDrawer } from '../components/SettingsDrawer';
+import AnimationView from './AnimationView';
 
 const nodeTypes = {
   agent: AgentNode,
@@ -100,7 +101,7 @@ function FlowBuilder() {
   const { 
     isExecuting, startRealExecution, executionResult, setIsConsoleExpanded, setIsConsoleOpen, 
     loadProject, saveProject, currentProjectId, isSaving, resetProject, validateGraph, 
-    showNotification, updateProjectMetadata, savedProjects
+    showNotification, updateProjectMetadata, currentProjectName, currentProjectDescription
   } = useStore(
     useShallow((state) => ({
       isExecuting: state.isExecuting,
@@ -116,7 +117,8 @@ function FlowBuilder() {
       validateGraph: state.validateGraph,
       showNotification: state.showNotification,
       updateProjectMetadata: state.updateProjectMetadata,
-      savedProjects: state.savedProjects
+      currentProjectName: state.currentProjectName,
+      currentProjectDescription: state.currentProjectDescription
     }))
   );
 
@@ -134,20 +136,19 @@ function FlowBuilder() {
     }
   }, [id, loadProject, resetProject]);
 
+  const [activeView, setActiveView] = React.useState<'editor' | 'animation'>('editor');
   const [isEditingTitle, setIsEditingTitle] = React.useState(false);
   const [editedTitle, setEditedTitle] = React.useState('');
   
-  const currentProject = useMemo(() => savedProjects.find(p => p.id === id), [savedProjects, id]);
-
   useEffect(() => {
-    if (currentProject) {
-      setEditedTitle(currentProject.name);
+    if (currentProjectName) {
+      setEditedTitle(currentProjectName);
     }
-  }, [currentProject]);
+  }, [currentProjectName]);
 
   const handleTitleSave = async () => {
-    if (id && id !== 'new' && editedTitle !== currentProject?.name) {
-      await updateProjectMetadata(id, editedTitle, currentProject?.description || '');
+    if (id && id !== 'new' && editedTitle !== currentProjectName) {
+      await updateProjectMetadata(id, editedTitle, currentProjectDescription || '');
     }
     setIsEditingTitle(false);
   };
@@ -191,7 +192,7 @@ function FlowBuilder() {
                     onClick={() => id !== 'new' && setIsEditingTitle(true)}
                     className={`text-xl font-bold text-brand-text tracking-tight ${id !== 'new' ? 'cursor-pointer hover:text-indigo-500 border-b border-transparent hover:border-indigo-500/30' : ''}`}
                   >
-                    {currentProject?.name || 'SimpleCrew'}
+                    {currentProjectName || 'SimpleCrew'}
                   </h1>
                 )}
                 <span className="text-brand-muted font-normal text-xl">Builder</span>
@@ -199,8 +200,35 @@ function FlowBuilder() {
             </div>
           </div>
         </div>
+
+        {/* --- SEGMENTED CONTROL TABS --- */}
+        <div className="absolute left-1/2 -translate-x-1/2 flex items-center bg-brand-bg/40 p-1 rounded-xl border border-dashed border-brand-border dark:border-slate-700 transition-all duration-300 backdrop-blur-sm">
+          <button
+            onClick={() => setActiveView('editor')}
+            data-testid="tab-view-editor"
+            className={`px-6 py-1.5 text-xs font-bold rounded-lg transition-all duration-300 flex items-center gap-2 ${
+              activeView === 'editor'
+                ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-md scale-105 px-8'
+                : 'text-brand-muted hover:text-indigo-500 hover:bg-brand-card/50'
+            }`}
+          >
+            Editor
+          </button>
+          <button
+            onClick={() => setActiveView('animation')}
+            data-testid="tab-view-animation"
+            className={`px-6 py-1.5 text-xs font-bold rounded-lg transition-all duration-300 flex items-center gap-2 ${
+              activeView === 'animation'
+                ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-md scale-105 px-8'
+                : 'text-brand-muted hover:text-indigo-500 hover:bg-brand-card/50'
+            }`}
+          >
+            Animation
+          </button>
+        </div>
+
         <div className="flex items-center gap-3">
-          {executionResult && (
+          {executionResult && activeView === 'editor' && (
             <button
               onClick={() => {
                 setIsConsoleOpen(true);
@@ -212,21 +240,23 @@ function FlowBuilder() {
               View Last Result
             </button>
           )}
-          <button
-            onClick={handleRunCrew}
-            disabled={isExecuting}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-sm ${isExecuting
-              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-              : 'bg-emerald-500 hover:bg-emerald-600 text-white hover:shadow'
-              }`}
-          >
-            <Play className="w-4 h-4 fill-current" />
-            {isExecuting ? 'Running...' : 'Run Crew'}
-          </button>
+          {activeView === 'editor' && (
+            <button
+              onClick={handleRunCrew}
+              disabled={isExecuting}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-sm ${isExecuting
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                : 'bg-emerald-500 hover:bg-emerald-600 text-white hover:shadow'
+                }`}
+            >
+              <Play className="w-4 h-4 fill-current" />
+              {isExecuting ? 'Running...' : 'Run Crew'}
+            </button>
+          )}
 
           <button
             onClick={() => {
-              saveProject(editedTitle, currentProject?.description);
+              saveProject(editedTitle, currentProjectDescription || '');
             }}
             disabled={isSaving}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-sm ${isSaving
@@ -242,13 +272,21 @@ function FlowBuilder() {
         </div>
       </header>
 
-      <div className="flex-1 w-full h-full flex flex-row relative">
+      <div className="flex-1 w-full h-full flex flex-row relative overflow-hidden">
         <Sidebar />
-        <div className="flex-1 h-full" ref={reactFlowWrapper}>
+        
+        {/* Editor View - Preserved in DOM via 'hidden' */}
+        <div className={`flex-1 h-full relative ${activeView === 'editor' ? 'flex' : 'hidden'}`} ref={reactFlowWrapper}>
           <FlowCanvas />
         </div>
+
+        {/* Animation View - Live Simulation */}
+        {activeView === 'animation' && (
+          <AnimationView />
+        )}
+
         <NodeConfigDrawer />
-        <ConsoleDrawer />
+        {activeView === 'editor' && <ConsoleDrawer />}
         <SettingsDrawer />
         <Toast />
         <Toaster position="bottom-right" />

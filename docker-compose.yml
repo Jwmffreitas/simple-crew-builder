@@ -1,0 +1,55 @@
+services:
+  # Database Service
+  db:
+    image: postgres:15-alpine
+    container_name: simple-crew-db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: simple-crew-builder
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # Backend Service (Python 3.12 + Node.js 20)
+  backend:
+    build:
+      context: ./simple-crew-backend
+      dockerfile: Dockerfile
+    container_name: simple-crew-backend
+    restart: always
+    depends_on:
+      - db
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/simple-crew-builder
+      - POSTGRES_DATABASE_URL=postgresql://postgres:postgres@db:5432/simple-crew-builder
+      # Load variables from the .env file in the backend directory
+    env_file:
+      - ./simple-crew-backend/.env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./simple-crew-backend:/app
+      - /app/.venv # Protect container's venv
+
+  # Frontend Service (React + Vite)
+  frontend:
+    build:
+      context: ./simple-crew-front
+      dockerfile: Dockerfile
+    container_name: simple-crew-frontend
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./simple-crew-front:/app
+      - /app/node_modules # Protect container's node_modules
+    environment:
+      - VITE_API_URL=http://localhost:8000
+
+volumes:
+  postgres_data:

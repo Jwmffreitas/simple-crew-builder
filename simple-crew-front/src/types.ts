@@ -11,6 +11,7 @@ export interface AgentNodeData extends Record<string, unknown> {
   modelId?: string;
   mcpServerIds?: string[];
   customToolIds?: string[];
+  globalToolIds?: string[];
 }
 
 export interface TaskNodeData extends Record<string, unknown> {
@@ -19,6 +20,7 @@ export interface TaskNodeData extends Record<string, unknown> {
   expected_output: string;
   context?: string[];
   customToolIds?: string[];
+  globalToolIds?: string[];
 }
 
 export interface CrewNodeData extends Record<string, unknown> {
@@ -41,9 +43,12 @@ export interface Project {
   id: string;
   name: string;
   description?: string;
+  workspace_id?: string;
   canvas_data: {
     nodes: AppNode[];
     edges: AppEdge[];
+    customTools?: CustomTool[];
+    mcpServers?: MCPServer[];
     version: string;
   };
   created_at: string;
@@ -85,6 +90,7 @@ export interface ToolConfig {
   isEnabled: boolean;
   apiKey?: string;
   requiresKey: boolean;
+  category?: string;
 }
 
 export interface CustomTool {
@@ -107,6 +113,19 @@ export interface MCPServer {
   headers?: Record<string, string>;
 }
 
+export interface Workspace {
+  id: string;
+  name: string;
+  path: string;
+}
+
+export interface WorkspaceFile {
+  name: string;
+  path: string;
+  is_dir: boolean;
+  children?: WorkspaceFile[];
+}
+
 export interface AppState {
   nodes: AppNode[];
   edges: AppEdge[];
@@ -115,6 +134,10 @@ export interface AppState {
   isSaving: boolean;
   savedProjects: Project[];
   currentProjectId: string | null;
+  currentProjectName: string | null;
+  currentProjectDescription: string | null;
+  currentProjectWorkspaceId: string | null;
+  updateProjectWorkspaceId: (workspaceId: string | null) => void;
   nodeStatuses: Record<string, NodeStatus>;
   onNodesChange: (changes: any) => void;
   onEdgesChange: (changes: any) => void;
@@ -126,8 +149,11 @@ export interface AppState {
   addNodeWithAutoPosition: (type: 'agent' | 'task' | 'crew', data: any) => void;
   fetchProjects: () => Promise<void>;
   saveProject: (name: string, description?: string) => Promise<void>;
+  updateProjectMetadata: (id: string, name: string, description: string) => Promise<void>;
   loadProject: (projectId: string) => Promise<void>;
   deleteProject: (projectId: string) => Promise<void>;
+  createNewProject: (name: string, description: string) => Promise<Project | null>;
+  duplicateProject: (id: string) => Promise<void>;
   setActiveNode: (id: string | null) => void;
   toggleCollapse: (nodeId: string) => void;
   setNodeStatus: (id: string, status: NodeStatus) => void;
@@ -142,20 +168,36 @@ export interface AppState {
   exportProjectJson: () => void;
   exportPythonProject: () => Promise<void>;
   loadProjectJson: (data: any) => boolean;
+  importProjectJsonAndSave: (data: any) => Promise<Project | null>;
   executionResult: string | null;
   setExecutionResult: (result: string | null) => void;
-  isConsoleOpen: boolean;
-  isConsoleExpanded: boolean;
-  setIsConsoleOpen: (isOpen: boolean) => void;
-  setIsConsoleExpanded: (isExpanded: boolean) => void;
+  resetProject: () => void;
+
+  
+  // Workspace management & Settings
+  workspaces: Workspace[];
+  activeWorkspaceId: string | null;
+  systemAiModelId: string | null;
+  setSystemAiModelId: (id: string | null) => void;
+  setActiveWorkspaceId: (id: string | null) => void;
+  fetchWorkspaces: () => Promise<void>;
+  addWorkspace: (workspace: Omit<Workspace, 'id' | 'created_at' | 'updated_at'>) => Promise<void>;
+  updateWorkspace: (id: string, workspace: Partial<Workspace>) => Promise<void>;
+  deleteWorkspace: (id: string) => Promise<void>;
+  openWorkspace: (id: string) => Promise<void>;
+  fetchSettings: () => Promise<void>;
+
+  updateSettings: (settings: { active_workspace_id?: string | null; system_ai_model_id?: string | null }) => Promise<void>;
+
   theme: 'light' | 'dark';
   toggleTheme: () => void;
   isSettingsOpen: boolean;
   setIsSettingsOpen: (open: boolean) => void;
-  resetProject: () => void;
-  duplicateProject: (id: string) => Promise<void>;
-  updateProjectMetadata: (id: string, name: string, description: string) => Promise<void>;
-  createNewProject: (name: string, description: string) => Promise<{id: string} | null>;
+  isConsoleOpen: boolean;
+  isConsoleExpanded: boolean;
+  setIsConsoleOpen: (isOpen: boolean) => void;
+  setIsConsoleExpanded: (isExpanded: boolean) => void;
+
   credentials: Credential[];
   fetchCredentials: () => Promise<void>;
   addCredential: (credential: Omit<Credential, 'id' | 'created_at'>) => void;
@@ -168,7 +210,6 @@ export interface AppState {
   updateModel: (id: string, model: Partial<ModelConfig>) => void;
   deleteModel: (id: string) => void;
   setDefaultModelConfig: (id: string) => void;
-  
   defaultModel: string;
   setDefaultModel: (model: string) => void;
 
@@ -187,10 +228,17 @@ export interface AppState {
   updateMCPServer: (id: string, server: Partial<MCPServer>) => void;
   deleteMCPServer: (id: string) => void;
 
-  systemAiModelId: string | null;
-  fetchSettings: () => Promise<void>;
-  setSystemAiModelId: (id: string | null) => void;
+  // AI Assistant / Consulting
   suggestAiContent: (nodeId: string, field: 'role' | 'goal' | 'backstory' | 'description' | 'expected_output') => Promise<void>;
   suggestBulkAiContent: (nodeId: string) => Promise<void>;
   suggestTaskBulkAiContent: (nodeId: string) => Promise<void>;
+
+  // Explorer
+  isExplorerOpen: boolean;
+  setIsExplorerOpen: (open: boolean) => void;
+  currentExplorerWsId: string | null;
+  setCurrentExplorerWsId: (id: string | null) => void;
+  fetchWorkspaceFiles: (wsId: string) => Promise<WorkspaceFile[]>;
+  fetchFileContent: (wsId: string, path: string) => Promise<string>;
+  downloadWorkspaceZip: (wsId: string, path?: string) => Promise<void>;
 }
