@@ -1,0 +1,19 @@
+.git
+.gitignore
+.venv
+**/__pycache__
+**/*.pyc
+**/node_modules
+**/dist
+postgres_data
+.env
+*.zip
+*.log
+.agent
+.gemini
+brain
+Step Id:*
+# Ignore large local folders in build context
+simple-crew-backend/.venv
+simple-crew-front/node_modules
+simple-crew-front/dist
