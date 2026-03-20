@@ -47,6 +47,8 @@ export interface Project {
   canvas_data: {
     nodes: AppNode[];
     edges: AppEdge[];
+    customTools?: CustomTool[];
+    mcpServers?: MCPServer[];
     version: string;
   };
   created_at: string;
@@ -150,6 +152,8 @@ export interface AppState {
   updateProjectMetadata: (id: string, name: string, description: string) => Promise<void>;
   loadProject: (projectId: string) => Promise<void>;
   deleteProject: (projectId: string) => Promise<void>;
+  createNewProject: (name: string, description: string) => Promise<Project | null>;
+  duplicateProject: (id: string) => Promise<void>;
   setActiveNode: (id: string | null) => void;
   toggleCollapse: (nodeId: string) => void;
   setNodeStatus: (id: string, status: NodeStatus) => void;
@@ -164,6 +168,7 @@ export interface AppState {
   exportProjectJson: () => void;
   exportPythonProject: () => Promise<void>;
   loadProjectJson: (data: any) => boolean;
+  importProjectJsonAndSave: (data: any) => Promise<Project | null>;
   executionResult: string | null;
   setExecutionResult: (result: string | null) => void;
   resetProject: () => void;

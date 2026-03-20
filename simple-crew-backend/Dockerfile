@@ -9,9 +9,13 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Node.js 20 (required for Node-based MCPs)
+# Install Node.js 20 (required for Node-based MCPs) and Playwright browsers/deps (Google Chrome)
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
+    && npx playwright install --with-deps chrome \
+    && mv /opt/google/chrome/chrome /opt/google/chrome/chrome.real \
+    && echo '#!/bin/bash\n/opt/google/chrome/chrome.real --no-sandbox "$@"' > /opt/google/chrome/chrome \
+    && chmod +x /opt/google/chrome/chrome \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv via pip (more reliable than ghcr.io if blocked)

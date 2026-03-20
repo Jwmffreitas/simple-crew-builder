@@ -12,7 +12,8 @@ import {
   Trash2,
   Edit2,
   X,
-  Moon
+  Moon,
+  Upload
 } from 'lucide-react';
 import { useStore } from '../store';
 import { SettingsDrawer } from '../components/SettingsDrawer';
@@ -34,6 +35,8 @@ const Dashboard = () => {
   const [newProject, setNewProject] = React.useState({ name: '', description: '' });
 
   const createNewProject = useStore((state) => state.createNewProject);
+  const importProjectJsonAndSave = useStore((state) => state.importProjectJsonAndSave);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchProjects();
@@ -62,6 +65,31 @@ const Dashboard = () => {
       setIsCreateModalOpen(false);
       navigate(`/workflow/${created.id}`);
     }
+  };
+
+  const handleImportJson = () => {
+    fileInputRef.current?.click();
+  };
+
+  const onFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const json = JSON.parse(e.target?.result as string);
+        const imported = await importProjectJsonAndSave(json);
+        if (imported) {
+          navigate(`/workflow/${imported.id}`);
+        }
+      } catch (err) {
+        alert("Failed to parse JSON file.");
+      }
+    };
+    reader.readAsText(file);
+    // Reset input
+    event.target.value = '';
   };
 
   const handleEditWorkflow = (id: string) => {
@@ -168,6 +196,22 @@ const Dashboard = () => {
               />
             </div>
             
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={onFileChange}
+              accept=".json"
+              className="hidden"
+            />
+            
+            <button 
+              onClick={handleImportJson}
+              className="bg-brand-card border border-brand-border text-brand-text px-4 py-2.5 rounded-xl font-semibold text-sm flex items-center gap-2 hover:bg-brand-bg transition-all hover:-translate-y-0.5"
+            >
+              <Upload className="w-4 h-4" />
+              Import JSON
+            </button>
+
             <button 
               onClick={handleNewWorkflow}
               className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-semibold text-sm flex items-center gap-2 shadow-lg shadow-indigo-500/30 transition-all hover:-translate-y-0.5 active:translate-y-0"

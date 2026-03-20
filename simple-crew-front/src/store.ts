@@ -370,14 +370,21 @@ export const useStore = create<AppState>((set, get) => ({
       version: "1.0",
       nodes: state.nodes,
       edges: state.edges,
-      globalTools: state.globalTools
+      globalTools: state.globalTools,
+      customTools: state.customTools,
+      mcpServers: state.mcpServers,
+      name: state.currentProjectName,
+      description: state.currentProjectDescription
     };
 
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'simple-crew-config.json';
+    const filename = state.currentProjectName 
+      ? `${state.currentProjectName.toLowerCase().replace(/ /g, '_')}-config.json` 
+      : 'simple-crew-config.json';
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -436,9 +443,27 @@ export const useStore = create<AppState>((set, get) => ({
         throw new Error("Invalid format");
       }
 
+      const globalMcp = get().mcpServers;
+      const projectMcp = data.mcpServers || [];
+      const mergedMcp = [...globalMcp];
+      projectMcp.forEach((p: any) => {
+        if (!mergedMcp.some(m => m.id === p.id)) mergedMcp.push(p);
+      });
+
+      const globalTools = get().customTools;
+      const projectTools = data.customTools || [];
+      const mergedTools = [...globalTools];
+      projectTools.forEach((p: any) => {
+        if (!mergedTools.some(m => m.id === p.id)) mergedTools.push(p);
+      });
+
       set({
         nodes: data.nodes,
         edges: data.edges,
+        customTools: mergedTools,
+        mcpServers: mergedMcp,
+        currentProjectName: data.name || null,
+        currentProjectDescription: data.description || null,
         isExecuting: false,
         activeNodeId: null,
         currentProjectId: null,
@@ -850,13 +875,43 @@ export const useStore = create<AppState>((set, get) => ({
   loadProject: async (projectId: string) => {
     if (projectId === get().currentProjectId) return;
     try {
+      // Ensure all global resources are loaded to resolve names/options in nodes
+      await Promise.all([
+        get().fetchModels(),
+        get().fetchMCPServers(),
+        get().fetchCustomTools(),
+        get().fetchCredentials(),
+        get().fetchWorkspaces(),
+        get().fetchSettings()
+      ]);
+
       const response = await fetch(`http://localhost:8000/api/v1/projects/${projectId}`);
       if (!response.ok) throw new Error('Falha ao carregar projeto');
       const project = await response.json();
 
+      const canvas_data = project.canvas_data;
+
+      // Merge current global MCP servers with project-specific portable ones
+      const globalMcp = get().mcpServers;
+      const projectMcp = canvas_data.mcpServers || [];
+      const mergedMcp = [...globalMcp];
+      projectMcp.forEach((p: any) => {
+        if (!mergedMcp.some(m => m.id === p.id)) mergedMcp.push(p);
+      });
+
+      // Merge current global Custom Tools with project-specific portable ones
+      const globalTools = get().customTools;
+      const projectTools = canvas_data.customTools || [];
+      const mergedTools = [...globalTools];
+      projectTools.forEach((p: any) => {
+        if (!mergedTools.some(m => m.id === p.id)) mergedTools.push(p);
+      });
+
       set({
-        nodes: project.canvas_data.nodes,
-        edges: migrateEdges(project.canvas_data.edges || []),
+        nodes: canvas_data.nodes,
+        edges: migrateEdges(canvas_data.edges || []),
+        customTools: mergedTools,
+        mcpServers: mergedMcp,
         currentProjectId: project.id,
         currentProjectName: project.name,
         currentProjectDescription: project.description || '',
@@ -1144,6 +1199,45 @@ export const useStore = create<AppState>((set, get) => ({
         edges: saved.canvas_data.edges,
       }));
 
+      return saved;
+    } catch (error: any) {
+      toast.error(error.message);
+      return null;
+    }
+  },
+
+  importProjectJsonAndSave: async (data: any) => {
+    try {
+      if (!data || !Array.isArray(data.nodes) || !Array.isArray(data.edges)) {
+        throw new Error("Invalid format");
+      }
+
+      const payload = {
+        name: data.name || "Imported Workflow",
+        description: data.description || "",
+        canvas_data: {
+          nodes: data.nodes,
+          edges: data.edges,
+          customTools: data.customTools || [],
+          mcpServers: data.mcpServers || [],
+          version: data.version || "1.0"
+        }
+      };
+
+      const response = await fetch('http://localhost:8000/api/v1/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) throw new Error('Failed to create project from JSON');
+      const saved = await response.json();
+
+      set((state) => ({
+        savedProjects: [...state.savedProjects, saved]
+      }));
+
+      toast.success("Workflow imported successfully!");
       return saved;
     } catch (error: any) {
       toast.error(error.message);
