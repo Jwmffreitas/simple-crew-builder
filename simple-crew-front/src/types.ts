@@ -32,6 +32,7 @@ export interface AgentNodeData extends Record<string, unknown> {
   system_template?: string;
   prompt_template?: string;
   response_template?: string;
+  taskOrder?: string[];
 }
 
 export interface TaskNodeData extends Record<string, unknown> {
@@ -45,6 +46,7 @@ export interface TaskNodeData extends Record<string, unknown> {
   human_input?: boolean;
   output_file?: string;
   create_directory?: boolean;
+  isCollapsed?: boolean;
 }
 
 export interface CrewNodeData extends Record<string, unknown> {

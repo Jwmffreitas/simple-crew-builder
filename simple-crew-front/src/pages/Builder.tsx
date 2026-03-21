@@ -7,6 +7,8 @@ import { Play, Sparkles, Save, Loader2, ArrowLeft } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 
 import { useStore } from '../store';
+import logo from '../assets/logo.PNG';
+
 import { AgentNode } from '../nodes/AgentNode';
 import { TaskNode } from '../nodes/TaskNode';
 import { CrewNode } from '../nodes/CrewNode';
@@ -173,8 +175,8 @@ function FlowBuilder() {
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center shadow-inner">
-              <span className="text-white font-bold text-lg">S</span>
+            <div className="w-10 h-10 overflow-hidden">
+              <img src={logo} alt="Logo" className="w-full h-full object-contain" />
             </div>
             <div className="flex flex-col">
               <div className="flex items-center gap-2">

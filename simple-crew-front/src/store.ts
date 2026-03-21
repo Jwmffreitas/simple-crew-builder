@@ -528,7 +528,7 @@ export const useStore = create<AppState>((set, get) => ({
             const taskOrder = (node.data as any).taskOrder || [];
             const newTaskOrder = taskOrder.filter((id: string) => !removedTaskIds.includes(id));
             if (newTaskOrder.length !== taskOrder.length) {
-                return { ...node, data: { ...node.data, taskOrder: newTaskOrder } };
+                return { ...node, data: { ...node.data, taskOrder: newTaskOrder } } as AppNode;
             }
           }
           return node;
@@ -554,7 +554,7 @@ export const useStore = create<AppState>((set, get) => ({
             updatedNodes = updatedNodes.map(node => {
               if (node.id === sourceNode.id) {
                 const taskOrder = (node.data as any).taskOrder || [];
-                return { ...node, data: { ...node.data, taskOrder: taskOrder.filter((id: string) => id !== targetNode.id) } };
+                return { ...node, data: { ...node.data, taskOrder: taskOrder.filter((id: string) => id !== targetNode.id) } } as AppNode;
               }
               return node;
             });
@@ -824,7 +824,7 @@ export const useStore = create<AppState>((set, get) => ({
           updatedNodes = state.nodes.map(node => {
             if (node.id === sourceNode.id) {
               const taskOrder = (node.data as any).taskOrder || [];
-              return { ...node, data: { ...node.data, taskOrder: taskOrder.filter((id: string) => id !== targetNode.id) } };
+              return { ...node, data: { ...node.data, taskOrder: taskOrder.filter((id: string) => id !== targetNode.id) } } as AppNode;
             }
             return node;
           });
@@ -846,7 +846,7 @@ export const useStore = create<AppState>((set, get) => ({
         updatedNodes = updatedNodes.map(node => {
           if (node.type === 'agent') {
             const taskOrder = (node.data as any).taskOrder || [];
-            return { ...node, data: { ...node.data, taskOrder: taskOrder.filter((id: string) => id !== nodeId) } };
+            return { ...node, data: { ...node.data, taskOrder: taskOrder.filter((id: string) => id !== nodeId) } } as AppNode;
           }
           return node;
         });
