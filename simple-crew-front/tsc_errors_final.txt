@@ -1,2 +1,0 @@
-src/components/HighlightedTextField.tsx(15,20): error TS2339: Property 'Editor' does not exist on type 'typeof import("C:/projetos/Agents/SimpleCrew/simple-crew-front/node_modules/react-simple-code-editor/lib/index")'.
-src/components/HighlightedTextField.tsx(15,50): error TS2339: Property 'Editor' does not exist on type 'typeof import("C:/projetos/Agents/SimpleCrew/simple-crew-front/node_modules/react-simple-code-editor/lib/index")'.
