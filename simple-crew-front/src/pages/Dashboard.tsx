@@ -13,11 +13,14 @@ import {
   Edit2,
   X,
   Moon,
-  Upload
+  Upload,
+  HelpCircle
 } from 'lucide-react';
 import { useStore } from '../store';
 import { SettingsDrawer } from '../components/SettingsDrawer';
 import { ConfirmationModal } from '../components/ConfirmationModal';
+import { AboutModal } from '../components/AboutModal';
+import logo from '../assets/logo.PNG';
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -35,6 +38,7 @@ const Dashboard = () => {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = React.useState(false);
   const [projectToDelete, setProjectToDelete] = React.useState<{id: string, name: string} | null>(null);
   const [editingProject, setEditingProject] = React.useState<{id: string, name: string, description: string} | null>(null);
+  const [isAboutModalOpen, setIsAboutModalOpen] = React.useState(false);
   const [newProject, setNewProject] = React.useState({ name: '', description: '' });
 
   const createNewProject = useStore((state) => state.createNewProject);
@@ -130,8 +134,8 @@ const Dashboard = () => {
     <div className="flex h-screen bg-brand-bg font-sans transition-colors duration-300">
       {/* Global Sidebar (n8n Style) */}
       <aside className="w-16 flex flex-col items-center py-6 bg-brand-card border-r border-brand-border z-10 transition-colors duration-300">
-        <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center mb-10 shadow-lg shadow-indigo-500/20">
-          <span className="text-white font-bold text-xl">S</span>
+        <div className="w-12 h-12 mb-10 overflow-hidden cursor-pointer group hover:scale-105 transition-transform duration-300" onClick={() => navigate('/')}>
+          <img src={logo} alt="Simple Crew Builder Logo" className="w-full h-full object-contain" />
         </div>
         
         <nav className="flex flex-col gap-6">
@@ -174,10 +178,31 @@ const Dashboard = () => {
                   <Moon className="w-4 h-4" />
                   Theme
                 </button>
+                <div className="h-px bg-brand-border my-1 mx-2 opacity-50" />
+                <button 
+                  onClick={() => {
+                    setIsAboutModalOpen(true);
+                    setIsSettingsMenuOpen(false);
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-brand-muted hover:text-brand-text hover:bg-brand-bg transition-colors text-left"
+                >
+                  <HelpCircle className="w-4 h-4" />
+                  About
+                </button>
               </div>
             )}
           </div>
         </nav>
+
+        <div className="mt-auto">
+          <button 
+            onClick={() => setIsAboutModalOpen(true)}
+            className="p-3 text-brand-muted hover:text-brand-text hover:bg-brand-bg rounded-xl transition-all"
+            title="About Simple Crew"
+          >
+            <HelpCircle className="w-6 h-6" />
+          </button>
+        </div>
       </aside>
 
       {/* Main Content Area */}
@@ -440,6 +465,10 @@ const Dashboard = () => {
           </div>
         </div>
       )}
+      <AboutModal 
+        isOpen={isAboutModalOpen} 
+        onClose={() => setIsAboutModalOpen(false)} 
+      />
     </div>
   );
 };

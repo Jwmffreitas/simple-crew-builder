@@ -12,7 +12,7 @@ while (Editor && Editor.default && Editor !== Editor.default) {
 
 // Special case for some builds where it's named 'Editor' specifically
 if (!Editor || (typeof Editor !== 'function' && typeof Editor !== 'string' && !(Editor && Editor.$$typeof))) {
-  if (EditorModule.Editor) Editor = EditorModule.Editor;
+  if ((EditorModule as any).Editor) Editor = (EditorModule as any).Editor;
 }
 
 // Import all required languages explicitly to avoid missing peer dependency issues in some environments
