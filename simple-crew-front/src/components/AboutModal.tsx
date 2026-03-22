@@ -8,6 +8,8 @@ import {
   ExternalLink
 } from 'lucide-react';
 import logo from '../assets/logo.PNG';
+import { PatchNotesModal } from './PatchNotesModal';
+
 
 interface AboutModalProps {
   isOpen: boolean;
@@ -15,6 +17,8 @@ interface AboutModalProps {
 }
 
 export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
+  const [isPatchNotesOpen, setIsPatchNotesOpen] = React.useState(false);
+
   if (!isOpen) return null;
 
   return (
@@ -48,10 +52,16 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
             <h2 className="text-3xl font-black text-brand-text tracking-tight mb-2">
               Simple Crew <span className="text-indigo-600">Builder</span>
             </h2>
-            <div className="flex items-center gap-2">
-              <span className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest border border-indigo-500/20">
-                Beta v0.0.1
-              </span>
+            <div className="flex items-center gap-2 group/version">
+              <button
+                data-testid="badge-version-about"
+                onClick={() => setIsPatchNotesOpen(true)}
+                title="Click to see what's new"
+                className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest border border-indigo-500/20 cursor-pointer hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-all active:scale-95 flex items-center gap-1.5 shadow-sm"
+              >
+                Beta v0.0.2
+                <Sparkles className="w-3 h-3 transition-transform group-hover/version:rotate-12" />
+              </button>
             </div>
           </div>
 
@@ -122,6 +132,11 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
           </div>
         </div>
       </div>
+
+      <PatchNotesModal 
+        isOpen={isPatchNotesOpen} 
+        onClose={() => setIsPatchNotesOpen(false)} 
+      />
     </div>
   );
 };

@@ -70,3 +70,5 @@ coverage.xml
 .env.production.local
 
 workspaces/
+
+releases/
