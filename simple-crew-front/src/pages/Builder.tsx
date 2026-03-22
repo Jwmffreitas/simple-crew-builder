@@ -12,6 +12,7 @@ import logo from '../assets/logo.PNG';
 import { AgentNode } from '../nodes/AgentNode';
 import { TaskNode } from '../nodes/TaskNode';
 import { CrewNode } from '../nodes/CrewNode';
+import { ChatNode } from '../nodes/ChatNode';
 import { Sidebar } from '../components/Sidebar';
 
 import { NodeConfigDrawer } from '../components/NodeConfigDrawer';
@@ -20,12 +21,15 @@ import { ExportDropdown } from '../components/ExportDropdown';
 import { Toast } from '../components/Toast';
 import { ConsoleDrawer } from '../components/ConsoleDrawer';
 import { SettingsDrawer } from '../components/SettingsDrawer';
+import { UsabilityCardsDrawer } from '../components/UsabilityCardsDrawer';
+import { ResizableChatPanel } from '../components/ResizableChatPanel';
 import AnimationView from './AnimationView';
 
 const nodeTypes = {
   agent: AgentNode,
   task: TaskNode,
   crew: CrewNode,
+  chat: ChatNode,
 };
 
 const edgeTypes = {
@@ -66,9 +70,13 @@ const FlowCanvas = () => {
       if (type === 'agent') data = { name: `New Agent ${timestamp}`, role: '', goal: '', backstory: '', isCollapsed: false };
       else if (type === 'task') data = { name: `New Task ${timestamp}`, description: '', expected_output: '' };
       else if (type === 'crew') data = { process: 'sequential', isCollapsed: false };
+      else if (type === 'chat') {
+        data = { name: 'Chat Trigger', description: 'Start the Crew from a user\'s text message.', isCollapsed: false, inputMapping: 'chat_input' };
+      }
 
       addNode({ id: getId(), type, position, data } as any);
       validateGraph();
+      useStore.getState().setIsUsabilityDrawerOpen(false);
   }, [screenToFlowPosition, addNode, validateGraph]);
 
 
@@ -101,7 +109,8 @@ function FlowBuilder() {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
 
   const { 
-    isExecuting, startRealExecution, executionResult, setIsConsoleExpanded, setIsConsoleOpen, 
+    isExecuting, startRealExecution, executionResult, setIsConsoleExpanded, setIsConsoleOpen,
+    isChatVisible, setIsChatVisible,
     loadProject, saveProject, currentProjectId, isSaving, resetProject, validateGraph, 
     showNotification, updateProjectMetadata, currentProjectName, currentProjectDescription
   } = useStore(
@@ -111,6 +120,8 @@ function FlowBuilder() {
       executionResult: state.executionResult,
       setIsConsoleExpanded: state.setIsConsoleExpanded,
       setIsConsoleOpen: state.setIsConsoleOpen,
+      isChatVisible: state.isChatVisible,
+      setIsChatVisible: state.setIsChatVisible,
       loadProject: state.loadProject,
       saveProject: state.saveProject,
       currentProjectId: state.currentProjectId,
@@ -231,10 +242,11 @@ function FlowBuilder() {
 
         <div className="flex items-center gap-3">
           {executionResult && activeView === 'editor' && (
-            <button
+          <button
               onClick={() => {
                 setIsConsoleOpen(true);
                 setIsConsoleExpanded(true);
+                setIsChatVisible(false);
               }}
               className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors shadow-sm border border-amber-200 dark:border-amber-800"
             >
@@ -287,11 +299,13 @@ function FlowBuilder() {
           <AnimationView />
         )}
 
+        <UsabilityCardsDrawer />
         <NodeConfigDrawer />
-        {activeView === 'editor' && <ConsoleDrawer />}
+        {activeView === 'editor' && !isChatVisible && <ConsoleDrawer />}
         <SettingsDrawer />
         <Toast />
         <Toaster position="bottom-right" />
+        <ResizableChatPanel />
       </div>
     </div>
   );

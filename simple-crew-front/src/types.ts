@@ -68,10 +68,20 @@ export interface CrewNodeData extends Record<string, unknown> {
   prompt_file?: string;
 }
 
+export interface ChatNodeData extends Record<string, unknown> {
+  name: string;
+  description: string;
+  isCollapsed?: boolean;
+  inputMapping?: string;
+  includeHistory?: boolean;
+  systemMessage?: string;
+}
+
 export type AppNode =
   | Node<AgentNodeData, 'agent'>
   | Node<TaskNodeData, 'task'>
-  | Node<CrewNodeData, 'crew'>;
+  | Node<CrewNodeData, 'crew'>
+  | Node<ChatNodeData, 'chat'>;
 
 export type AppEdge = Edge;
 
@@ -184,7 +194,7 @@ export interface AppState {
   deleteNode: (nodeId: string) => void;
   updateNodeData: (nodeId: string, data: Partial<any>) => void;
   addNode: (node: AppNode) => void;
-  addNodeWithAutoPosition: (type: 'agent' | 'task' | 'crew', data: any) => void;
+  addNodeWithAutoPosition: (type: 'agent' | 'task' | 'crew' | 'chat', data: any) => void;
   fetchProjects: () => Promise<void>;
   saveProject: (name: string, description?: string) => Promise<void>;
   updateProjectMetadata: (id: string, name: string, description: string) => Promise<void>;
@@ -195,7 +205,7 @@ export interface AppState {
   setActiveNode: (id: string | null) => void;
   toggleCollapse: (nodeId: string) => void;
   setNodeStatus: (id: string, status: NodeStatus) => void;
-  startRealExecution: () => Promise<void>;
+  startRealExecution: () => Promise<string | void>;
   updateCrewAgentOrder: (crewId: string, newOrder: string[]) => void;
   updateAgentTaskOrder: (agentId: string, newOrder: string[]) => void;
   nodeErrors: Record<string, string[]>;
@@ -235,6 +245,10 @@ export interface AppState {
   isConsoleExpanded: boolean;
   setIsConsoleOpen: (isOpen: boolean) => void;
   setIsConsoleExpanded: (isExpanded: boolean) => void;
+  isUsabilityDrawerOpen: boolean;
+  setIsUsabilityDrawerOpen: (open: boolean) => void;
+  isChatVisible: boolean;
+  setIsChatVisible: (visible: boolean) => void;
 
   credentials: Credential[];
   fetchCredentials: () => Promise<void>;

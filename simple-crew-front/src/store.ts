@@ -138,6 +138,8 @@ export const useStore = create<AppState>((set, get) => ({
   executionResult: null,
   isConsoleOpen: false,
   isConsoleExpanded: false,
+  isUsabilityDrawerOpen: false,
+  isChatVisible: false,
   theme: (localStorage.getItem('theme') as 'light' | 'dark') || 'light',
   isSettingsOpen: false,
   credentials: [],
@@ -171,6 +173,8 @@ export const useStore = create<AppState>((set, get) => ({
   setIsSettingsOpen: (open) => set({ isSettingsOpen: open }),
   setIsExplorerOpen: (open) => set({ isExplorerOpen: open }),
   setCurrentExplorerWsId: (id) => set({ currentExplorerWsId: id }),
+  setIsUsabilityDrawerOpen: (open) => set({ isUsabilityDrawerOpen: open }),
+  setIsChatVisible: (visible) => set({ isChatVisible: visible }),
 
   fetchWorkspaceFiles: async (wsId: string) => {
     try {
@@ -741,6 +745,8 @@ export const useStore = create<AppState>((set, get) => ({
           }
         }
       }
+      
+      return get().executionResult || undefined;
 
     } catch (err: any) {
       console.error(err);
@@ -760,8 +766,9 @@ export const useStore = create<AppState>((set, get) => ({
       // -- CREWAI HIERARCHY VALIDATION RULES -- //
       const isCrewToAgent = sourceNode.type === 'crew' && targetNode.type === 'agent';
       const isAgentToTask = sourceNode.type === 'agent' && targetNode.type === 'task';
+      const isChatToCrew = sourceNode.type === 'chat' && targetNode.type === 'crew';
 
-      if (!isCrewToAgent && !isAgentToTask) {
+      if (!isCrewToAgent && !isAgentToTask && !isChatToCrew) {
         // Block all illogical loops: task -> agent, agent -> crew, crew -> crew, etc.
         console.warn(`[CrewAI Rules] Invalid connection blocked: ${sourceNode.type} -> ${targetNode.type}`);
         return state;
@@ -786,8 +793,23 @@ export const useStore = create<AppState>((set, get) => ({
         newEdges = newEdges.filter((edge) => edge.target !== connection.target);
       }
 
-      // 3. Forçar o Type Custom Global
-      const newConnection = { ...connection, type: 'deletable' };
+      if (targetNode.type === 'crew') {
+        // Uma Crew só pode ter 1 Trigger de entrada visualmente ativo
+        newEdges = newEdges.filter((edge) => edge.target !== connection.target);
+      }
+
+      // 3. Forçar o Type Custom Global e Estilos visuais
+      let newConnection: any = { ...connection, type: 'deletable' };
+
+      if (isChatToCrew) {
+        newConnection = {
+          ...newConnection,
+          animated: true,
+          style: { stroke: '#22d3ee', strokeWidth: 2, strokeDasharray: '5 5' }
+        };
+        // Auto-open text trigger panel
+        set({ isChatVisible: true });
+      }
 
       // 4. Sincronizar taskOrder se for Agent -> Task
       let nextNodes = state.nodes;
@@ -1015,7 +1037,7 @@ export const useStore = create<AppState>((set, get) => ({
     });
   },
 
-  addNodeWithAutoPosition: (type: 'agent' | 'task' | 'crew', data: any) => {
+  addNodeWithAutoPosition: (type: 'agent' | 'task' | 'crew' | 'chat', data: any) => {
     const state = get();
     const existingNodes = state.nodes;
     

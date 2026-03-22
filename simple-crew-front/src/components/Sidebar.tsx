@@ -1,11 +1,12 @@
 import React, { useRef, useState } from 'react';
-import { User, CheckSquare, Users, Upload, Settings, PlusCircle, FolderOpen, X, ExternalLink, Info, Plus } from 'lucide-react';
+import { User, CheckSquare, Users, Upload, Settings, PlusCircle, FolderOpen, X, ExternalLink, Info, Plus, LayoutTemplate } from 'lucide-react';
 import { useReactFlow } from '@xyflow/react';
 import toast from 'react-hot-toast';
 import { useStore } from '../store';
 
 export function Sidebar() {
   const setIsSettingsOpen = useStore((state) => state.setIsSettingsOpen);
+  const setIsUsabilityDrawerOpen = useStore((state) => state.setIsUsabilityDrawerOpen);
   const workspaces = useStore((state) => state.workspaces);
   const activeWorkspaceId = useStore((state) => state.activeWorkspaceId);
   const updateSettings = useStore((state) => state.updateSettings);
@@ -191,6 +192,26 @@ export function Sidebar() {
             >
               <PlusCircle className="w-4 h-4" />
             </button>
+          </div>
+
+          <div
+            className="bg-brand-card border border-brand-border rounded-lg p-3 flex items-center justify-between hover:shadow-md hover:border-fuchsia-400 dark:hover:border-fuchsia-500 transition-all group relative cursor-pointer"
+            onClick={() => setIsUsabilityDrawerOpen(true)}
+            data-testid="btn-open-usability-drawer"
+          >
+            <div className="flex items-center gap-3">
+              <div className="bg-fuchsia-100 dark:bg-fuchsia-900/30 p-2 rounded-md group-hover:bg-fuchsia-500 group-hover:text-white transition-colors">
+                <LayoutTemplate className="w-4 h-4 text-fuchsia-600 dark:text-fuchsia-400 group-hover:text-white" />
+              </div>
+              <span className="text-sm font-medium text-brand-text">Usability cards</span>
+            </div>
+            <div
+              className="p-1.5 hover:bg-fuchsia-100 dark:hover:bg-fuchsia-900/50 rounded-md text-fuchsia-600 dark:text-fuchsia-400 transition-colors"
+              aria-label="Open Usability Cards"
+              title="Open Usability Cards"
+            >
+              <PlusCircle className="w-4 h-4" />
+            </div>
           </div>
         </div>
 

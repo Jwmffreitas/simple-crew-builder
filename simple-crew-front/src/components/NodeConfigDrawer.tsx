@@ -83,6 +83,7 @@ export function NodeConfigDrawer() {
   const [isMcpSelectorOpen, setIsMcpSelectorOpen] = useState(false);
   const [isCustomToolSelectorOpen, setIsCustomToolSelectorOpen] = useState(false);
   const [isGlobalToolSelectorOpen, setIsGlobalToolSelectorOpen] = useState(false);
+  const [isChatMappingSelectorOpen, setIsChatMappingSelectorOpen] = useState(false);
   const [loadingFields, setLoadingFields] = useState<Record<string, boolean>>({});
 
   // -- Autocomplete State --
@@ -240,6 +241,20 @@ export function NodeConfigDrawer() {
   if (!activeNodeId || !activeNode) return null;
 
   const { type, data } = activeNode;
+
+  // -- Chat -> Crew Data Mapping Logic -- //
+  let connectedCrewInputs: string[] = [];
+  let isChatConnected = false;
+  if (type === 'chat') {
+    const edgeToCrew = edges.find(e => e.source === activeNodeId);
+    if (edgeToCrew) {
+      isChatConnected = true;
+      const crewNode = nodes.find(n => n.id === edgeToCrew.target);
+      if (crewNode && crewNode.type === 'crew') {
+        connectedCrewInputs = Object.keys((crewNode.data as any)?.inputs || {}).filter(k => !k.startsWith('input_'));
+      }
+    }
+  }
 
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -1772,6 +1787,125 @@ export function NodeConfigDrawer() {
                   </SortableContext>
                 </DndContext>
               )}
+            </div>
+          </div>
+        )}
+
+        {type === 'chat' && (
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-bold text-brand-muted uppercase tracking-wider">Crew Input Variable</label>
+              <p className="text-[11px] text-brand-muted mb-2 leading-relaxed">
+                Choose the Crew variable where the chat message will be injected (e.g. <code className="text-cyan-400">kickoff(inputs=&#123;"nome_da_variavel": "msg"&#125;)</code>).
+              </p>
+
+              <div className="relative">
+                <button
+                  onClick={() => isChatConnected && setIsChatMappingSelectorOpen(!isChatMappingSelectorOpen)}
+                  disabled={!isChatConnected}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-dashed transition-all focus:outline-none ${
+                    !isChatConnected
+                      ? 'bg-slate-900 border-slate-800 text-slate-600 cursor-not-allowed'
+                      : (data as any).inputMapping
+                        ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400 hover:border-cyan-500/60 hover:bg-cyan-500/20'
+                        : 'bg-brand-bg/50 border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-300'
+                  }`}
+                  data-testid="btn-chat-mapping-selector"
+                >
+                  <span className="font-mono text-sm">
+                    {!isChatConnected 
+                      ? 'Connect to a Crew first' 
+                      : (data as any).inputMapping || '+ Select Crew Input'}
+                  </span>
+                  {isChatConnected && (data as any).inputMapping && (
+                    <GripVertical className="w-4 h-4 opacity-50" />
+                  )}
+                </button>
+
+                {isChatMappingSelectorOpen && isChatConnected && (
+                  <>
+                    <div 
+                      className="fixed inset-0 z-[55]" 
+                      onClick={() => setIsChatMappingSelectorOpen(false)}
+                    />
+                    <div className="absolute left-0 right-0 top-full mt-2 bg-brand-card border border-brand-border rounded-xl shadow-xl z-[60] py-2 animate-in fade-in zoom-in duration-200">
+                      <div className="px-3 py-1.5 border-b border-brand-border mb-1">
+                        <span className="text-[10px] font-bold text-brand-muted uppercase tracking-wider">Available Inputs</span>
+                      </div>
+                      <div className="max-h-48 overflow-y-auto px-1 custom-scrollbar">
+                        {connectedCrewInputs.map((inputKey) => (
+                          <button
+                            key={inputKey}
+                            onClick={() => {
+                              updateNodeData(activeNode.id, { inputMapping: inputKey });
+                              setIsChatMappingSelectorOpen(false);
+                            }}
+                            className={`w-full flex items-center justify-between px-3 py-2 text-xs rounded-lg transition-colors text-left group ${
+                              (data as any).inputMapping === inputKey 
+                                ? 'bg-cyan-500/10 text-cyan-500 font-bold' 
+                                : 'text-brand-text hover:bg-brand-bg'
+                            }`}
+                          >
+                            <span className="font-mono truncate">{inputKey}</span>
+                            <Plus className={`w-3 h-3 ${
+                              (data as any).inputMapping === inputKey ? 'opacity-100 text-cyan-500' : 'text-brand-muted group-hover:text-cyan-500'
+                            }`} />
+                          </button>
+                        ))}
+                        {connectedCrewInputs.length === 0 && (
+                          <div className="px-3 py-4 text-center">
+                            <p className="text-[10px] text-brand-muted italic">No inputs defined in the connected Crew.</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Include History Toggle */}
+            <div className="flex items-center justify-between gap-3 pt-3 border-t border-brand-border/50">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs font-bold text-brand-muted uppercase tracking-wider">Include History</span>
+                <p className="text-[11px] text-brand-muted opacity-70 leading-relaxed">
+                  If enabled, sends the last 8 messages as context to the Crew agents.
+                </p>
+              </div>
+              <button
+                role="switch"
+                aria-checked={(data as any).includeHistory ?? false}
+                data-testid="toggle-include-history"
+                onClick={() => updateNodeData(activeNode.id, { includeHistory: !((data as any).includeHistory ?? false) })}
+                className={`relative flex-none w-10 h-5.5 rounded-full border transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-500 ${
+                  (data as any).includeHistory
+                    ? 'bg-cyan-500 border-cyan-400'
+                    : 'bg-slate-700 border-slate-600'
+                }`}
+                style={{ minWidth: '2.5rem', height: '1.375rem' }}
+              >
+                <span
+                  className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                    (data as any).includeHistory ? 'translate-x-4' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* System Message */}
+            <div className="flex flex-col gap-1.5 pt-3 border-t border-brand-border/50">
+              <label className="text-xs font-bold text-brand-muted uppercase tracking-wider">System Message <span className="normal-case font-normal opacity-60">(Optional)</span></label>
+              <textarea
+                data-testid="textarea-system-message"
+                value={(data as any).systemMessage || ''}
+                onChange={(e) => updateNodeData(activeNode.id, { systemMessage: e.target.value })}
+                placeholder="ex: You are an expert in CrewAI framework. Answer clearly and concisely."
+                rows={3}
+                className="w-full bg-brand-bg border border-brand-border rounded-lg px-3 py-2 text-xs text-brand-text outline-none focus:ring-2 focus:ring-cyan-500/40 transition-all font-mono resize-y leading-relaxed"
+              />
+              <p className="text-[11px] text-brand-muted opacity-70">
+                Sent as <code className="text-cyan-400">role: system</code> at the top of the payload, before any history or user message.
+              </p>
             </div>
           </div>
         )}
