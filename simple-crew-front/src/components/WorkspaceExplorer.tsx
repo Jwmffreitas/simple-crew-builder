@@ -10,9 +10,14 @@ import {
   Code, 
   Search,
   RefreshCw,
-  Archive
+  Archive,
+  Upload,
+  Plus,
+  Trash2,
+  Copy
 } from 'lucide-react';
 import { useStore } from '../store';
+import toast from 'react-hot-toast';
 import type { WorkspaceFile } from '../types';
 import Prism from 'prismjs';
 import 'prismjs/themes/prism-tomorrow.css';
@@ -20,18 +25,31 @@ import 'prismjs/components/prism-python';
 import 'prismjs/components/prism-javascript';
 import 'prismjs/components/prism-json';
 import 'prismjs/components/prism-markdown';
+import { ConfirmationModal } from './ConfirmationModal';
 
 interface FileTreeItemProps {
   item: WorkspaceFile;
   level: number;
   onFileSelect: (path: string) => void;
   onFolderZip: (path: string) => void;
+  onDelete: (path: string) => void;
+  onContextMenu: (e: React.MouseEvent, item: WorkspaceFile) => void;
   selectedPath: string | null;
+  searchTerm: string;
 }
 
-const FileTreeItem: React.FC<FileTreeItemProps> = ({ item, level, onFileSelect, onFolderZip, selectedPath }) => {
+const FileTreeItem: React.FC<FileTreeItemProps> = ({ item, level, onFileSelect, onFolderZip, onDelete, onContextMenu, selectedPath, searchTerm }) => {
   const [isOpen, setIsOpen] = useState(false);
   const isSelected = selectedPath === item.path;
+  
+  // Auto-expand if searching
+  useEffect(() => {
+    if (item.is_dir && item.children && item.children.length > 0) {
+      // In a real search implementation, we might want more complex logic, 
+      // but for this recursive filter, if the item is in the list, it's because it or a child matched.
+      // We can't easily know here if we should open, but we can check if searchTerm is active.
+    }
+  }, []);
 
   const toggleOpen = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -63,6 +81,7 @@ const FileTreeItem: React.FC<FileTreeItemProps> = ({ item, level, onFileSelect, 
             : 'hover:bg-brand-bg/50 text-brand-muted hover:text-brand-text border border-transparent'
         }`}
         style={{ paddingLeft: `${level * 12 + 8}px` }}
+        onContextMenu={(e) => onContextMenu(e, item)}
       >
         <span className="shrink-0">{getIcon()}</span>
         {item.is_dir && <Folder className="w-4 h-4 text-amber-500/80 shrink-0" />}
@@ -82,18 +101,32 @@ const FileTreeItem: React.FC<FileTreeItemProps> = ({ item, level, onFileSelect, 
             <Archive className="w-3 h-3" />
           </button>
         )}
+
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete(item.path);
+          }}
+          className="p-1 hover:bg-red-500/10 rounded-md opacity-0 group-hover:opacity-100 transition-all text-brand-muted hover:text-red-500"
+          title={`Delete ${item.is_dir ? 'folder' : 'file'}`}
+        >
+          <Trash2 className="w-3 h-3" />
+        </button>
       </div>
       
-      {item.is_dir && isOpen && item.children && (
+      {(isOpen || (searchTerm.trim() !== '' && item.is_dir && (item.children?.length ?? 0) > 0)) && (
         <div className="animate-in fade-in slide-in-from-top-1 duration-200">
-          {item.children.map((child, idx) => (
+          {(item.children || []).map((child, idx) => (
             <FileTreeItem 
               key={`${child.path}-${idx}`} 
               item={child} 
               level={level + 1} 
               onFileSelect={onFileSelect}
               onFolderZip={onFolderZip}
+              onDelete={onDelete}
+              onContextMenu={onContextMenu}
               selectedPath={selectedPath}
+              searchTerm={searchTerm}
             />
           ))}
         </div>
@@ -109,6 +142,8 @@ export function WorkspaceExplorer() {
   const fetchFiles = useStore((state) => state.fetchWorkspaceFiles);
   const fetchContent = useStore((state) => state.fetchFileContent);
   const downloadZip = useStore((state) => state.downloadWorkspaceZip);
+  const uploadFiles = useStore((state) => state.uploadWorkspaceFiles);
+  const deleteFile = useStore((state) => state.deleteWorkspaceFile);
   const workspaces = useStore((state) => state.workspaces);
 
   const [files, setFiles] = useState<WorkspaceFile[]>([]);
@@ -116,7 +151,14 @@ export function WorkspaceExplorer() {
   const [content, setContent] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isContentLoading, setIsContentLoading] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [pathToExclude, setPathToExclude] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, item: WorkspaceFile } | null>(null);
+
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const folderInputRef = React.useRef<HTMLInputElement>(null);
 
   const workspace = workspaces.find(w => w.id === currentWsId);
 
@@ -164,6 +206,94 @@ export function WorkspaceExplorer() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
+
+  const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = event.target.files;
+    if (!currentWsId || !selectedFiles || selectedFiles.length === 0) return;
+
+    setIsUploading(true);
+    try {
+      await uploadFiles(currentWsId, selectedFiles);
+      await loadFiles();
+    } catch (error) {
+      console.error("Upload failed", error);
+    } finally {
+      setIsUploading(false);
+      // Reset input
+      if (event.target) event.target.value = '';
+    }
+  };
+
+  const handleDelete = (path: string) => {
+    setPathToExclude(path);
+    setIsDeleteModalOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!currentWsId || !pathToExclude) return;
+
+    try {
+      await deleteFile(currentWsId, pathToExclude);
+      if (selectedPath === pathToExclude) {
+        setSelectedPath(null);
+        setContent(null);
+      }
+      await loadFiles();
+    } catch (error) {
+      console.error("Delete failed", error);
+    } finally {
+      setIsDeleteModalOpen(false);
+      setPathToExclude(null);
+    }
+  };
+
+  const handleContextMenu = (e: React.MouseEvent, item: WorkspaceFile) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, item });
+  };
+
+  const closeContextMenu = () => setContextMenu(null);
+
+  useEffect(() => {
+    const handleClick = () => closeContextMenu();
+    window.addEventListener('click', handleClick, true);
+    window.addEventListener('contextmenu', handleClick, true);
+    return () => {
+      window.removeEventListener('click', handleClick, true);
+      window.removeEventListener('contextmenu', handleClick, true);
+    };
+  }, []);
+
+  const copyRelativePath = (path: string) => {
+    navigator.clipboard.writeText(path);
+    toast.success('Path copied to clipboard');
+  };
+
+  const filterFiles = (fileList: WorkspaceFile[]): WorkspaceFile[] => {
+    if (!searchTerm.trim()) return fileList;
+    
+    return fileList
+      .map(file => {
+        // Se for diretório, filtra os filhos primeiro
+        if (file.is_dir && file.children) {
+          const filteredChildren = filterFiles(file.children);
+          // Se tiver filhos que batem com a busca, mantém o diretório e seus filhos filtrados
+          if (filteredChildren.length > 0) {
+            return { ...file, children: filteredChildren };
+          }
+        }
+        
+        // Se o nome do arquivo/pasta bate com a busca, mantém
+        if (file.name.toLowerCase().includes(searchTerm.toLowerCase())) {
+          return file;
+        }
+        
+        return null;
+      })
+      .filter((file): file is WorkspaceFile => file !== null);
+  };
+
+  const filteredDocs = filterFiles(files);
 
   if (!isExplorerOpen) return null;
 
@@ -223,7 +353,7 @@ export function WorkspaceExplorer() {
           
           {/* Sidebar: File Tree */}
           <div className="w-72 border-r border-brand-border flex flex-col bg-brand-bg/10">
-            <div className="p-4 border-b border-brand-border">
+            <div className="p-4 border-b border-brand-border space-y-3">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-brand-muted" />
                 <input 
@@ -234,6 +364,50 @@ export function WorkspaceExplorer() {
                   className="w-full bg-brand-card border border-brand-border rounded-xl pl-9 pr-4 py-2 text-xs text-brand-text outline-none focus:border-indigo-500/50 transition-all"
                 />
               </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploading}
+                  className="flex items-center justify-center gap-2 py-2 px-3 bg-brand-bg/50 hover:bg-brand-bg border border-brand-border rounded-xl text-[10px] font-bold text-brand-text transition-all active:scale-95 disabled:opacity-50"
+                  title="Upload Files"
+                >
+                  <Plus className="w-3 h-3 text-indigo-500" />
+                  Files
+                </button>
+                <button
+                  onClick={() => folderInputRef.current?.click()}
+                  disabled={isUploading}
+                  className="flex items-center justify-center gap-2 py-2 px-3 bg-brand-bg/50 hover:bg-brand-bg border border-brand-border rounded-xl text-[10px] font-bold text-brand-text transition-all active:scale-95 disabled:opacity-50"
+                  title="Upload Folder"
+                >
+                  <Upload className="w-3 h-3 text-indigo-500" />
+                  Folder
+                </button>
+              </div>
+
+              {/* Hidden Inputs */}
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleUpload}
+                multiple
+                className="hidden"
+              />
+              <input
+                type="file"
+                ref={folderInputRef}
+                onChange={handleUpload}
+                {...{ webkitdirectory: "", directory: "" } as any}
+                className="hidden"
+              />
+
+              {isUploading && (
+                <div className="flex items-center gap-2 px-2 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded-lg animate-pulse">
+                  <RefreshCw className="w-3 h-3 animate-spin text-indigo-500" />
+                  <span className="text-[9px] font-bold text-indigo-400">Uploading...</span>
+                </div>
+              )}
             </div>
             
             <div className="flex-1 overflow-y-auto p-2 custom-scrollbar">
@@ -248,14 +422,17 @@ export function WorkspaceExplorer() {
                 </div>
               ) : (
                 <div className="space-y-0.5">
-                  {files.map((file, idx) => (
+                  {filteredDocs.map((file, idx) => (
                     <FileTreeItem 
                       key={`${file.path}-${idx}`} 
                       item={file} 
                       level={0} 
                       onFileSelect={handleFileSelect}
                       onFolderZip={(path) => currentWsId && downloadZip(currentWsId, path)}
+                      onDelete={handleDelete}
+                      onContextMenu={handleContextMenu}
                       selectedPath={selectedPath}
+                      searchTerm={searchTerm}
                     />
                   ))}
                 </div>
@@ -313,6 +490,72 @@ export function WorkspaceExplorer() {
 
         </div>
       </div>
+
+      <ConfirmationModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => setIsDeleteModalOpen(false)}
+        onConfirm={confirmDelete}
+        title="Delete Item"
+        message={`Are you sure you want to delete "${pathToExclude}"? This action cannot be undone.`}
+        confirmText="Delete"
+        variant="danger"
+      />
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <div 
+          className="fixed z-[200] bg-brand-card border border-brand-border rounded-xl shadow-2xl py-1.5 min-w-[160px] animate-in fade-in zoom-in-95 duration-100"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {contextMenu.item.is_dir && (
+            <button 
+              onClick={() => {
+                currentWsId && downloadZip(currentWsId, contextMenu.item.path);
+                closeContextMenu();
+              }}
+              className="w-full flex items-center gap-3 px-3 py-2 text-xs text-brand-text hover:bg-brand-bg/80 transition-all text-left"
+            >
+              <Archive className="w-3.5 h-3.5 text-indigo-400" />
+              Download ZIP
+            </button>
+          )}
+          {!contextMenu.item.is_dir && (
+            <button 
+              onClick={async () => {
+                await handleFileSelect(contextMenu.item.path);
+                handleDownload();
+                closeContextMenu();
+              }}
+              className="w-full flex items-center gap-3 px-3 py-2 text-xs text-brand-text hover:bg-brand-bg/80 transition-all text-left"
+            >
+              <Download className="w-3.5 h-3.5 text-indigo-400" />
+              Download File
+            </button>
+          )}
+          <button 
+            onClick={() => {
+              copyRelativePath(contextMenu.item.path);
+              closeContextMenu();
+            }}
+            className="w-full flex items-center gap-3 px-3 py-2 text-xs text-brand-text hover:bg-brand-bg/80 transition-all text-left"
+          >
+            <Copy className="w-3.5 h-3.5 text-brand-muted" />
+            Copy Relative Path
+          </button>
+          <div className="h-px bg-brand-border my-1" />
+          <button 
+            onClick={() => {
+              handleDelete(contextMenu.item.path);
+              closeContextMenu();
+            }}
+            className="w-full flex items-center gap-3 px-3 py-2 text-xs text-red-400 hover:bg-red-500/10 transition-all text-left"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Delete
+          </button>
+        </div>
+      )}
     </div>
   );
 }

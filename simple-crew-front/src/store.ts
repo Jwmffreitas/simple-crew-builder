@@ -200,6 +200,52 @@ export const useStore = create<AppState>((set, get) => ({
       return '';
     }
   },
+  
+  uploadWorkspaceFiles: async (wsId: string, files: FileList | File[]) => {
+    try {
+      const formData = new FormData();
+      Array.from(files).forEach((file) => {
+        formData.append('files', file);
+        // webkitRelativePath is available if a folder was selected.
+        // If it's a single file upload, webkitRelativePath is usually empty.
+        const path = (file as any).webkitRelativePath || file.name;
+        formData.append('paths', path);
+      });
+
+      const response = await fetch(`${API_URL}/api/v1/workspaces/${wsId}/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.detail || 'Failed to upload files');
+      }
+      
+      toast.success('Upload complete!');
+    } catch (error: any) {
+      toast.error(error.message);
+      throw error;
+    }
+  },
+
+  deleteWorkspaceFile: async (wsId: string, path: string) => {
+    try {
+      const response = await fetch(`${API_URL}/api/v1/workspaces/${wsId}/files?path=${encodeURIComponent(path)}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.detail || 'Failed to delete file');
+      }
+      
+      toast.success('Deleted successfully');
+    } catch (error: any) {
+      toast.error(error.message);
+      throw error;
+    }
+  },
 
   fetchMCPServers: async () => {
     try {
