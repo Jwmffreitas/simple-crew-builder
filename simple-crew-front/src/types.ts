@@ -292,5 +292,7 @@ export interface AppState {
   setCurrentExplorerWsId: (id: string | null) => void;
   fetchWorkspaceFiles: (wsId: string) => Promise<WorkspaceFile[]>;
   fetchFileContent: (wsId: string, path: string) => Promise<string>;
+  uploadWorkspaceFiles: (wsId: string, files: FileList | File[]) => Promise<void>;
+  deleteWorkspaceFile: (wsId: string, path: string) => Promise<void>;
   downloadWorkspaceZip: (wsId: string, path?: string) => Promise<void>;
 }

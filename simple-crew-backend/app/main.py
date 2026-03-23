@@ -6,7 +6,7 @@ import asyncio
 from datetime import datetime
 from contextlib import asynccontextmanager
 from typing import List, Optional, Dict, Any
-from fastapi import FastAPI, HTTPException, Depends, Header, Request, BackgroundTasks, Query
+from fastapi import FastAPI, HTTPException, Depends, Header, Request, BackgroundTasks, Query, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlmodel import Session, select
@@ -791,6 +791,74 @@ async def download_workspace_zip(
     except Exception as e:
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/workspaces/{ws_id}/upload")
+async def upload_workspace_files(
+    ws_id: str,
+    files: List[UploadFile] = File(...),
+    paths: List[str] = Form(...),
+    session: Session = Depends(get_session)
+):
+    ws = session.get(Workspace, ws_id)
+    if not ws:
+        raise HTTPException(status_code=404, detail="Workspace não encontrado")
+    
+    abs_root = os.path.abspath(os.path.join(os.getcwd(), ws.path))
+    if not os.path.exists(abs_root):
+        os.makedirs(abs_root, exist_ok=True)
+
+    # Note: paths will be received as a list of strings, one for each file.
+    # Frontend will send webkitRelativePath for folder uploads or just filename for single files.
+    
+    saved_files = []
+    
+    for file, rel_path in zip(files, paths):
+        # Security: prevent traversal
+        # rel_path could be like "folder/sub/file.txt" or "file.txt"
+        target_path = os.path.abspath(os.path.join(abs_root, rel_path))
+        if not target_path.startswith(abs_root):
+            continue # Skip invalid paths
+        
+        # Ensure parent directory exists
+        os.makedirs(os.path.dirname(target_path), exist_ok=True)
+        
+        # Save file (overwrite if exists)
+        with open(target_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        saved_files.append(rel_path)
+
+    return {"message": f"{len(saved_files)} arquivos carregados com sucesso", "files": saved_files}
+
+
+@app.delete("/api/v1/workspaces/{ws_id}/files")
+async def delete_workspace_file(
+    ws_id: str,
+    path: str = Query(...),
+    session: Session = Depends(get_session)
+):
+    ws = session.get(Workspace, ws_id)
+    if not ws:
+        raise HTTPException(status_code=404, detail="Workspace não encontrado")
+    
+    abs_root = os.path.abspath(os.path.join(os.getcwd(), ws.path))
+    target_path = os.path.abspath(os.path.join(abs_root, path))
+    
+    if not target_path.startswith(abs_root):
+        raise HTTPException(status_code=403, detail="Acesso negado")
+    
+    if not os.path.exists(target_path):
+        raise HTTPException(status_code=404, detail="Arquivo ou pasta não encontrado")
+
+    try:
+        if os.path.isdir(target_path):
+            shutil.rmtree(target_path)
+        else:
+            os.remove(target_path)
+        return {"message": f"{'Pasta' if os.path.isdir(target_path) else 'Arquivo'} removido com sucesso"}
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 

@@ -1,11 +1,70 @@
 import { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { useStore } from '../store';
-import { X, ChevronDown, ChevronUp, Send } from 'lucide-react';
+import { X, ChevronDown, ChevronUp, Send, Copy, Check, FileText } from 'lucide-react';
+import Prism from 'prismjs';
+import 'prismjs/themes/prism-tomorrow.css';
+import 'prismjs/components/prism-python';
+import 'prismjs/components/prism-typescript';
+import 'prismjs/components/prism-javascript';
+import 'prismjs/components/prism-json';
+import 'prismjs/components/prism-markdown';
+import 'prismjs/components/prism-bash';
+import toast from 'react-hot-toast';
+
 type Message = {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+};
+
+const MarkdownCodeBlock = ({ children, className }: { children: string; className?: string }) => {
+  const [copied, setCopied] = useState(false);
+  const language = className ? className.replace('language-', '') : 'text';
+
+  useEffect(() => {
+    Prism.highlightAll();
+  }, [children]);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(children);
+    setCopied(true);
+    toast.success('Code copied to clipboard');
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="my-4 rounded-xl overflow-hidden border border-slate-200 dark:border-brand-border bg-[#0d1117] group/code shadow-lg shadow-black/5 dark:shadow-black/20">
+      <div className="flex items-center justify-between px-4 py-2.5 bg-slate-900/50 dark:bg-slate-800/40 border-b border-white/5 backdrop-blur-sm">
+        <div className="flex items-center gap-2">
+          <FileText className="w-3.5 h-3.5 text-cyan-400" />
+          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{language}</span>
+        </div>
+        <button 
+          onClick={handleCopy}
+          className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white transition-all active:scale-95 border border-white/5"
+        >
+          {copied ? (
+            <>
+              <Check className="w-3 h-3 text-emerald-400" />
+              <span className="text-[10px] font-bold text-emerald-400">Copied!</span>
+            </>
+          ) : (
+            <>
+              <Copy className="w-3 h-3" />
+              <span className="text-[10px] font-bold">Copy</span>
+            </>
+          )}
+        </button>
+      </div>
+      <div className="relative">
+        <pre className={`!bg-transparent !p-4 !m-0 !text-[11px] font-mono leading-relaxed overflow-x-auto custom-scrollbar language-${language}`}>
+          <code className={`language-${language} text-slate-200`}>{children}</code>
+        </pre>
+      </div>
+    </div>
+  );
 };
 
 export function ResizableChatPanel() {
@@ -32,7 +91,7 @@ export function ResizableChatPanel() {
 
   const panelRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (!isMinimized) {
@@ -45,7 +104,7 @@ export function ResizableChatPanel() {
       if (!isResizing) return;
       const newHeight = window.innerHeight - e.clientY;
       const minHeight = 200;
-      const maxHeight = window.innerHeight * 0.5;
+      const maxHeight = window.innerHeight * 0.8;
 
       setChatHeight(Math.max(minHeight, Math.min(newHeight, maxHeight)));
       // Auto expand if user drags up
@@ -77,6 +136,24 @@ export function ResizableChatPanel() {
       return () => clearTimeout(timeoutId);
     }
   }, [isLoading, isChatVisible, isMinimized]);
+  
+  // Auto-resize logic
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto';
+      const scrollHeight = inputRef.current.scrollHeight;
+      // Define a max height (e.g., 5-6 lines, ~150px)
+      const maxHeight = 160;
+      inputRef.current.style.height = `${Math.min(scrollHeight, maxHeight)}px`;
+      
+      // Toggle scrollbar visibility
+      if (scrollHeight > maxHeight) {
+        inputRef.current.style.overflowY = 'auto';
+      } else {
+        inputRef.current.style.overflowY = 'hidden';
+      }
+    }
+  }, [inputText]);
 
   const handleSendMessage = async () => {
     if (!inputText.trim() || isLoading) return;
@@ -169,19 +246,26 @@ export function ResizableChatPanel() {
     }
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
+
   if (!isChatVisible) return null;
 
   return (
     <div
       ref={panelRef}
-      className={`absolute bottom-0 left-64 right-0 z-[50] bg-slate-950 border-t border-slate-800 flex flex-col transition-[height] duration-0 shadow-2xl ${
+      className={`absolute bottom-0 left-64 right-0 z-[50] bg-brand-bg border-t border-brand-border flex flex-col transition-[height] duration-0 shadow-2xl ${
         isMinimized ? 'h-12' : ''
       }`}
       style={!isMinimized ? { height: `${chatHeight}px` } : undefined}
     >
       {/* Resizer Bar */}
       <div
-        className="absolute top-0 left-0 right-0 h-1.5 cursor-ns-resize z-10 bg-transparent hover:bg-cyan-500/50 transition-colors"
+        className="absolute top-0 left-0 right-0 h-1.5 cursor-ns-resize z-10 bg-transparent hover:bg-brand-accent/50 transition-colors"
         onMouseDown={(e) => {
           e.preventDefault();
           setIsResizing(true);
@@ -189,21 +273,21 @@ export function ResizableChatPanel() {
       />
 
       {/* Header */}
-      <div className="flex-none h-12 flex items-center justify-between px-4 border-b border-slate-800 bg-slate-900/50">
+      <div className="flex-none h-12 flex items-center justify-between px-4 border-b border-brand-border bg-brand-card">
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse" />
-          <h3 className="text-sm font-bold text-slate-200">Interactive Chat</h3>
+          <div className="w-2 h-2 rounded-full bg-brand-accent animate-pulse" />
+          <h3 className="text-sm font-bold text-brand-text">Interactive Chat</h3>
         </div>
         <div className="flex items-center gap-1">
           <button
             onClick={() => setIsMinimized(!isMinimized)}
-            className="p-1.5 rounded-md hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors"
+            className="p-1.5 rounded-md hover:bg-brand-bg text-brand-muted hover:text-brand-text transition-colors"
           >
             {isMinimized ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
           <button
             onClick={() => setIsChatVisible(false)}
-            className="p-1.5 rounded-md hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition-colors"
+            className="p-1.5 rounded-md hover:bg-red-500/10 text-brand-muted hover:text-red-500 transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -226,40 +310,69 @@ export function ResizableChatPanel() {
                 data-testid={`chat-message-${msg.role}`}
               >
                 {msg.role === 'assistant' && (
-                  <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center shrink-0">
-                    <span className="text-xs font-bold text-slate-300">AI</span>
+                  <div className="w-8 h-8 rounded-full bg-brand-bg border border-brand-border flex items-center justify-center shrink-0">
+                    <span className="text-xs font-bold text-brand-muted">AI</span>
                   </div>
                 )}
                 
                 <div 
                   className={`px-4 py-2 max-w-[80%] rounded-2xl border ${
                     msg.role === 'user' 
-                      ? 'bg-indigo-600 rounded-tr-none border-indigo-500 text-white' 
-                      : 'bg-slate-800/80 rounded-tl-none border-slate-700/50 text-slate-200'
+                      ? 'bg-brand-accent/10 rounded-tr-none border-brand-accent/30 text-brand-text shadow-sm' 
+                      : 'bg-brand-card rounded-tl-none border-brand-border text-brand-text'
                   }`}
                 >
                   <div className="text-sm break-words chat-markdown">
                     <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
                       components={{
-                        p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
-                        strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
-                        em: ({ children }) => <em className="italic">{children}</em>,
-                        code: ({ children, className }) =>
-                          className ? (
-                            <code className="block bg-black/30 rounded p-2 mt-1 mb-1 text-xs font-mono whitespace-pre-wrap">{children}</code>
-                          ) : (
-                            <code className="bg-black/30 rounded px-1 text-xs font-mono">{children}</code>
-                          ),
-                        pre: ({ children }) => <pre className="bg-black/30 rounded p-2 mt-1 mb-1 text-xs font-mono overflow-x-auto whitespace-pre-wrap">{children}</pre>,
-                        ul: ({ children }) => <ul className="list-disc list-inside mb-1 space-y-0.5">{children}</ul>,
-                        ol: ({ children }) => <ol className="list-decimal list-inside mb-1 space-y-0.5">{children}</ol>,
-                        li: ({ children }) => <li className="ml-2">{children}</li>,
-                        h1: ({ children }) => <h1 className="text-base font-bold mb-1">{children}</h1>,
-                        h2: ({ children }) => <h2 className="text-sm font-bold mb-1">{children}</h2>,
-                        h3: ({ children }) => <h3 className="text-sm font-semibold mb-1">{children}</h3>,
-                        blockquote: ({ children }) => <blockquote className="border-l-2 border-slate-500 pl-2 italic opacity-80">{children}</blockquote>,
-                        a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="underline opacity-80 hover:opacity-100">{children}</a>,
-                        hr: () => <hr className="border-slate-600 my-2" />,
+                        p: ({ children }) => <p className="mb-3 last:mb-0 leading-relaxed text-[13px]">{children}</p>,
+                        strong: ({ children }) => <strong className="font-bold text-brand-text">{children}</strong>,
+                        em: ({ children }) => <em className="italic opacity-90">{children}</em>,
+                        code: ({ children, className }) => {
+                          const isBlock = className?.includes('language-') || (children && String(children).includes('\n'));
+                          if (isBlock) {
+                            return <MarkdownCodeBlock className={className}>{String(children).replace(/\n$/, '')}</MarkdownCodeBlock>;
+                          }
+                          return (
+                            <code className="bg-brand-bg rounded px-1.5 py-0.5 text-[11px] font-mono border border-brand-border text-brand-accent">
+                              {children}
+                            </code>
+                          );
+                        },
+                        pre: ({ children }) => <>{children}</>,
+                        ul: ({ children }) => <ul className="list-disc list-outside mb-3 ml-4 space-y-1.5 text-[13px]">{children}</ul>,
+                        ol: ({ children }) => <ol className="list-decimal list-outside mb-3 ml-4 space-y-1.5 text-[13px]">{children}</ol>,
+                        li: ({ children }) => <li className="pl-1 marker:text-brand-accent">{children}</li>,
+                        h1: ({ children }) => <h1 className="text-lg font-black mb-3 mt-4 text-brand-text transition-colors">{children}</h1>,
+                        h2: ({ children }) => <h2 className="text-base font-black mb-2 mt-3 text-brand-text/90 italic">{children}</h2>,
+                        h3: ({ children }) => <h3 className="text-sm font-bold mb-2 mt-2 text-brand-text/80">{children}</h3>,
+                        blockquote: ({ children }) => (
+                          <blockquote className="border-l-4 border-brand-accent/30 bg-brand-accent/5 pl-4 py-2 my-4 italic rounded-r-lg text-brand-muted">
+                            {children}
+                          </blockquote>
+                        ),
+                        a: ({ href, children }) => (
+                          <a 
+                            href={href} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="text-brand-accent underline decoration-brand-accent/30 underline-offset-4 hover:text-brand-accent/80 transition-all font-medium"
+                          >
+                            {children}
+                          </a>
+                        ),
+                        hr: () => <hr className="border-brand-border my-6" />,
+                        table: ({ children }) => (
+                          <div className="overflow-x-auto my-4 rounded-xl border border-brand-border shadow-inner bg-brand-bg/50">
+                            <table className="w-full text-left text-xs border-collapse">
+                              {children}
+                            </table>
+                          </div>
+                        ),
+                        thead: ({ children }) => <thead className="bg-brand-bg text-brand-muted font-bold">{children}</thead>,
+                        th: ({ children }) => <th className="px-4 py-2 border-b border-brand-border">{children}</th>,
+                        td: ({ children }) => <td className="px-4 py-2 border-b border-brand-border text-brand-text/80">{children}</td>,
                       }}
                     >{msg.content}</ReactMarkdown>
                   </div>
@@ -283,32 +396,27 @@ export function ResizableChatPanel() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Input Area */}
-          <div className="flex-none p-3 border-t border-slate-800 bg-slate-900/50">
-            <form 
-              className="relative"
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleSendMessage();
-              }}
-            >
-              <input
+          <div className="flex-none p-3 border-t border-brand-border bg-brand-card">
+            <div className="relative">
+              <textarea
                 ref={inputRef}
-                type="text"
+                rows={1}
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
+                onKeyDown={handleKeyDown}
                 placeholder="Type your message..."
                 disabled={isLoading}
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-4 pr-12 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all font-medium disabled:opacity-50"
+                className="w-full bg-brand-bg border border-brand-border rounded-xl pl-4 pr-12 py-3 text-sm text-brand-text placeholder-brand-muted focus:outline-none focus:border-brand-accent focus:ring-1 focus:ring-brand-accent transition-all font-medium disabled:opacity-50 resize-none min-h-[46px] max-h-[160px] custom-scrollbar shadow-sm"
               />
               <button 
-                type="submit"
+                type="button"
+                onClick={handleSendMessage}
                 disabled={!inputText.trim() || isLoading}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-md bg-cyan-600 hover:bg-cyan-500 text-white transition-colors disabled:opacity-50"
+                className="absolute right-2.5 bottom-2.5 p-1.5 rounded-lg bg-brand-accent hover:bg-brand-accent/80 text-white transition-colors disabled:opacity-50 shadow-lg shadow-brand-accent/20"
               >
                 <Send className="w-4 h-4" />
               </button>
-            </form>
+            </div>
           </div>
         </>
       )}
