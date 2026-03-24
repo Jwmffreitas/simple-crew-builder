@@ -148,25 +148,171 @@ export const useStore = create<AppState>((set, get) => ({
   models: JSON.parse(localStorage.getItem('models') || '[]'),
   defaultModel: localStorage.getItem('default_model') || 'gpt-4o',
   
-  globalTools: JSON.parse(localStorage.getItem('global_tools_v5') || JSON.stringify([
+  globalTools: JSON.parse(localStorage.getItem('global_tools_v8') || JSON.stringify([
     { id: 'serper', name: 'Google Search (Serper)', description: 'Search the web for real-time information.', isEnabled: false, requiresKey: true, category: 'Search' },
     { id: 'scrape', name: 'Website Scraper', description: 'Extract clean content from any website URL.', isEnabled: false, requiresKey: false, category: 'Web' },
     { id: 'directory_read', name: 'Directory Read', description: 'List all files within a directory.', isEnabled: false, requiresKey: false, category: 'Files & Documents' },
     { id: 'file_read', name: 'File Read', description: 'Read the content of a specific file.', isEnabled: false, requiresKey: false, category: 'Files & Documents' },
     { id: 'file_write', name: 'File Write', description: 'Write content to a specific file.', isEnabled: false, requiresKey: false, category: 'Files & Documents' },
     { id: 'directory_search', name: 'Directory Search', description: 'Search for files within a directory pattern.', isEnabled: false, requiresKey: false, category: 'Files & Documents' },
-    { id: 'pdf_search', name: 'PDF Search', description: 'RAG search through PDF documents.', isEnabled: false, requiresKey: false, category: 'Files & Documents' },
-    { id: 'docx_search', name: 'Docx Search', description: 'RAG search through Word documents.', isEnabled: false, requiresKey: false, category: 'Files & Documents' },
-    { id: 'json_search', name: 'JSON Search', description: 'RAG search through JSON files.', isEnabled: false, requiresKey: false, category: 'Files & Documents' },
-    { id: 'xml_search', name: 'XML Search', description: 'RAG search through XML files.', isEnabled: false, requiresKey: false, category: 'Files & Documents' },
-    { id: 'csv_search', name: 'CSV Search', description: 'RAG search through CSV files.', isEnabled: false, requiresKey: false, category: 'Files & Documents' },
-    { id: 'mdx_search', name: 'MDX Search', description: 'RAG search through MDX files.', isEnabled: false, requiresKey: false, category: 'Files & Documents' },
-    { id: 'txt_search', name: 'TXT Search', description: 'RAG search through TXT files.', isEnabled: false, requiresKey: false, category: 'Files & Documents' },
+    { 
+      id: 'search_knowledge_base', 
+      name: 'Knowledge Base Search (Neo4j RAG)', 
+      description: 'Search for context and rules in the official corporate Knowledge Base.', 
+      isEnabled: true, 
+      requiresKey: false, 
+      category: 'RAG / DATABASE',
+      user_config_schema: {
+        fields: {
+          knowledge_base_id: {
+            type: 'select',
+            label: 'Knowledge Base',
+            placeholder: 'Select a Knowledge Base',
+            required: true,
+            optionsUrl: '/api/knowledge-bases'
+          }
+        }
+      }
+    },
+    { 
+      id: 'pdf_search', 
+      name: 'PDF Search', 
+      description: 'RAG search through PDF documents.', 
+      isEnabled: false, 
+      requiresKey: false, 
+      category: 'Files & Documents',
+      user_config_schema: {
+        fields: {
+          knowledge_base_id: {
+            type: 'select',
+            label: 'Knowledge Base',
+            placeholder: 'Select a Knowledge Base',
+            required: true,
+            optionsUrl: '/api/knowledge-bases'
+          }
+        }
+      }
+    },
+    { 
+      id: 'docx_search', 
+      name: 'Docx Search', 
+      description: 'RAG search through Word documents.', 
+      isEnabled: false, 
+      requiresKey: false, 
+      category: 'Files & Documents',
+      user_config_schema: {
+        fields: {
+          knowledge_base_id: {
+            type: 'select',
+            label: 'Knowledge Base',
+            placeholder: 'Select a Knowledge Base',
+            required: true,
+            optionsUrl: '/api/knowledge-bases'
+          }
+        }
+      }
+    },
+    { 
+      id: 'json_search', 
+      name: 'JSON Search', 
+      description: 'RAG search through JSON files.', 
+      isEnabled: false, 
+      requiresKey: false, 
+      category: 'Files & Documents',
+      user_config_schema: {
+        fields: {
+          knowledge_base_id: {
+            type: 'select',
+            label: 'Knowledge Base',
+            placeholder: 'Select a Knowledge Base',
+            required: true,
+            optionsUrl: '/api/knowledge-bases'
+          }
+        }
+      }
+    },
+    { 
+      id: 'xml_search', 
+      name: 'XML Search', 
+      description: 'RAG search through XML files.', 
+      isEnabled: false, 
+      requiresKey: false, 
+      category: 'Files & Documents',
+      user_config_schema: {
+        fields: {
+          knowledge_base_id: {
+            type: 'select',
+            label: 'Knowledge Base',
+            placeholder: 'Select a Knowledge Base',
+            required: true,
+            optionsUrl: '/api/knowledge-bases'
+          }
+        }
+      }
+    },
+    { 
+      id: 'csv_search', 
+      name: 'CSV Search', 
+      description: 'RAG search through CSV files.', 
+      isEnabled: false, 
+      requiresKey: false, 
+      category: 'Files & Documents',
+      user_config_schema: {
+        fields: {
+          knowledge_base_id: {
+            type: 'select',
+            label: 'Knowledge Base',
+            placeholder: 'Select a Knowledge Base',
+            required: true,
+            optionsUrl: '/api/knowledge-bases'
+          }
+        }
+      }
+    },
+    { 
+      id: 'mdx_search', 
+      name: 'MDX Search', 
+      description: 'RAG search through MDX files.', 
+      isEnabled: false, 
+      requiresKey: false, 
+      category: 'Files & Documents',
+      user_config_schema: {
+        fields: {
+          knowledge_base_id: {
+            type: 'select',
+            label: 'Knowledge Base',
+            placeholder: 'Select a Knowledge Base',
+            required: true,
+            optionsUrl: '/api/knowledge-bases'
+          }
+        }
+      }
+    },
+    { 
+      id: 'txt_search', 
+      name: 'TXT Search', 
+      description: 'RAG search through TXT files.', 
+      isEnabled: false, 
+      requiresKey: false, 
+      category: 'Files & Documents',
+      user_config_schema: {
+        fields: {
+          knowledge_base_id: {
+            type: 'select',
+            label: 'Knowledge Base',
+            placeholder: 'Select a Knowledge Base',
+            required: true,
+            optionsUrl: '/api/knowledge-bases'
+          }
+        }
+      }
+    },
     { id: 'ocr', name: 'OCR Tool', description: 'Extract text from images (local or URL).', isEnabled: false, requiresKey: false, category: 'Files & Documents' },
   ])),
   customTools: [],
   mcpServers: [], // Will be fetched from backend
-  systemAiModelId: null,
+  systemAiModelId: localStorage.getItem('default_system_ai_model_id'),
+  embeddingModelId: localStorage.getItem('default_embedding_model_id'),
   activeWorkspaceId: null,
   workspaces: [],
   isExplorerOpen: false,
@@ -289,7 +435,7 @@ export const useStore = create<AppState>((set, get) => ({
   updateToolConfig: (id, config) => {
     set((state) => {
       const newTools = state.globalTools.map(t => t.id === id ? { ...t, ...config } : t);
-      localStorage.setItem('global_tools_v5', JSON.stringify(newTools));
+      localStorage.setItem('global_tools_v8', JSON.stringify(newTools));
       return { globalTools: newTools };
     });
   },
@@ -1420,8 +1566,12 @@ export const useStore = create<AppState>((set, get) => ({
       const settings = await response.json();
       set({ 
         activeWorkspaceId: settings.active_workspace_id,
-        systemAiModelId: settings.system_ai_model_id
+        systemAiModelId: settings.system_ai_model_id,
+        embeddingModelId: settings.embedding_model_id
       });
+      // Update localStorage to stay in sync
+      if (settings.system_ai_model_id) localStorage.setItem('default_system_ai_model_id', settings.system_ai_model_id);
+      if (settings.embedding_model_id) localStorage.setItem('default_embedding_model_id', settings.embedding_model_id);
     } catch (error) {
       console.error("Error fetching settings:", error);
       throw error;
@@ -1524,7 +1674,8 @@ export const useStore = create<AppState>((set, get) => ({
         temperature: m.temperature,
         maxTokens: m.max_tokens,
         maxCompletionTokens: m.max_completion_tokens,
-        isDefault: m.is_default
+        isDefault: m.is_default,
+        model_type: m.model_type
       }));
 
       set({ models: mappedModels });
@@ -1556,7 +1707,8 @@ export const useStore = create<AppState>((set, get) => ({
       temperature: modelConfig.temperature,
       max_tokens: modelConfig.maxTokens,
       max_completion_tokens: modelConfig.maxCompletionTokens,
-      is_default: modelConfig.isDefault
+      is_default: modelConfig.isDefault,
+      model_type: modelConfig.model_type
     };
 
     try {
@@ -1587,6 +1739,7 @@ export const useStore = create<AppState>((set, get) => ({
     if (modelUpdate.maxTokens !== undefined) mappedUpdate.max_tokens = modelUpdate.maxTokens;
     if (modelUpdate.maxCompletionTokens !== undefined) mappedUpdate.max_completion_tokens = modelUpdate.maxCompletionTokens;
     if (modelUpdate.isDefault !== undefined) mappedUpdate.is_default = modelUpdate.isDefault;
+    if (modelUpdate.model_type !== undefined) mappedUpdate.model_type = modelUpdate.model_type;
 
     try {
       const response = await fetch(`${API_URL}/api/v1/models/${id}`, {
@@ -1614,6 +1767,12 @@ export const useStore = create<AppState>((set, get) => ({
       if (!response.ok) throw new Error('Failed to delete model');
 
       toast.success("Model removed");
+
+      // Clear from settings if it was being used
+      const { systemAiModelId, embeddingModelId, setSystemAiModelId, setEmbeddingModelId } = get();
+      if (systemAiModelId === id) setSystemAiModelId(null);
+      if (embeddingModelId === id) setEmbeddingModelId(null);
+
       await get().fetchModels();
     } catch (error: any) {
       console.error("Delete model error:", error);
@@ -1758,7 +1917,16 @@ export const useStore = create<AppState>((set, get) => ({
   setActiveWorkspaceId: (id: string | null) => set({ activeWorkspaceId: id }),
   setSystemAiModelId: (id: string | null) => {
     set({ systemAiModelId: id });
+    if (id) localStorage.setItem('default_system_ai_model_id', id);
+    else localStorage.removeItem('default_system_ai_model_id');
     get().updateSettings({ system_ai_model_id: id });
+  },
+
+  setEmbeddingModelId: (id: string | null) => {
+    set({ embeddingModelId: id });
+    if (id) localStorage.setItem('default_embedding_model_id', id);
+    else localStorage.removeItem('default_embedding_model_id');
+    get().updateSettings({ embedding_model_id: id });
   },
   
   updateSettings: async (settings) => {
@@ -1772,7 +1940,8 @@ export const useStore = create<AppState>((set, get) => ({
       const updated = await response.json();
       set({ 
         activeWorkspaceId: updated.active_workspace_id,
-        systemAiModelId: updated.system_ai_model_id
+        systemAiModelId: updated.system_ai_model_id,
+        embeddingModelId: updated.embedding_model_id
       });
       toast.success("Settings updated");
     } catch (error: any) {

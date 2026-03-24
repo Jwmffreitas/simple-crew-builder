@@ -45,9 +45,26 @@ services:
     networks:
       - simple-crew-network
 
+  # Neo4j Graph & Vector Database (Production)
+  neo4j:
+    image: neo4j:5.23.0
+    container_name: simple-crew-neo4j
+    restart: always
+    environment:
+      - NEO4J_AUTH=${NEO4J_USERNAME:-neo4j}/${NEO4J_PASSWORD}
+      - NEO4J_PLUGINS=["apoc"]
+      - NEO4J_dbms_security_procedures_unrestricted=apoc.*
+    volumes:
+      - neo4j_data_prod:/data
+      - neo4j_logs_prod:/logs
+    networks:
+      - simple-crew-network
+
 volumes:
   postgres_data:
   backend_workspaces:
+  neo4j_data_prod:
+  neo4j_logs_prod:
 
 networks:
   simple-crew-network:

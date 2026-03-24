@@ -34,6 +34,8 @@ import { HighlightedTextField } from '../components/HighlightedTextField';
 import { CustomSelect } from '../components/CustomSelect';
 import { type ModelConfig, type MCPServer, type CustomTool } from '../types';
 import { ConfirmationModal } from '../components/ConfirmationModal';
+import { KnowledgeBaseSettings } from '../components/KnowledgeBaseSettings';
+import { Database } from 'lucide-react';
 
 
 const SettingsPage = () => {
@@ -44,7 +46,7 @@ const SettingsPage = () => {
     globalTools, updateToolConfig,
     customTools, addCustomTool, updateCustomTool, deleteCustomTool,
     mcpServers, addMCPServer, updateMCPServer, deleteMCPServer,
-    systemAiModelId, setSystemAiModelId, fetchSettings,
+    systemAiModelId, setSystemAiModelId, embeddingModelId, setEmbeddingModelId, fetchSettings,
     workspaces, fetchWorkspaces, addWorkspace, updateWorkspace, deleteWorkspace, activeWorkspaceId, setActiveWorkspaceId
   } = useStore();
 
@@ -55,7 +57,7 @@ const SettingsPage = () => {
     fetchSettings();
   }, [fetchCredentials, fetchModels, fetchWorkspaces, fetchSettings]);
 
-  const [activeTab, setActiveTab] = useState<'credentials' | 'models' | 'tools' | 'mcp' | 'workspaces'>('credentials');
+  const [activeTab, setActiveTab] = useState<'credentials' | 'models' | 'tools' | 'mcp' | 'workspaces' | 'knowledge_base'>('credentials');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isModelModalOpen, setIsModelModalOpen] = useState(false);
   const [isMCPModalOpen, setIsMCPModalOpen] = useState(false);
@@ -71,7 +73,8 @@ const SettingsPage = () => {
     temperature: undefined, 
     maxTokens: undefined, 
     maxCompletionTokens: undefined, 
-    isDefault: false 
+    isDefault: false,
+    model_type: 'GENERATIVE'
   });
   const [newMCP, setNewMCP] = useState<Omit<MCPServer, 'id'>>({
     name: '',
@@ -167,7 +170,8 @@ const SettingsPage = () => {
         temperature: undefined, 
         maxTokens: undefined, 
         maxCompletionTokens: undefined, 
-        isDefault: false 
+        isDefault: false,
+        model_type: 'GENERATIVE'
       });
       setEditingModelId(null);
       setIsModelModalOpen(false);
@@ -184,7 +188,8 @@ const SettingsPage = () => {
       temperature: model.temperature,
       maxTokens: model.maxTokens,
       maxCompletionTokens: model.maxCompletionTokens,
-      isDefault: model.isDefault
+      isDefault: model.isDefault,
+      model_type: model.model_type || 'GENERATIVE'
     });
     setEditingModelId(model.id);
     setIsModelModalOpen(true);
@@ -353,23 +358,51 @@ const SettingsPage = () => {
             </div>
             <ChevronRight className={`w-4 h-4 transition-transform ${activeTab === 'workspaces' ? 'rotate-90' : ''}`} />
           </button>
+
+          <button 
+            onClick={() => setActiveTab('knowledge_base')}
+            className={`w-full flex items-center justify-between p-3 rounded-xl transition-all ${activeTab === 'knowledge_base' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600' : 'text-brand-muted hover:bg-brand-bg hover:text-brand-text'}`}
+          >
+            <div className="flex items-center gap-3 text-sm font-bold">
+              <Database className="w-4 h-4" />
+              Knowledge Bases
+            </div>
+            <ChevronRight className={`w-4 h-4 transition-transform ${activeTab === 'knowledge_base' ? 'rotate-90' : ''}`} />
+          </button>
         </nav>
 
-        <div className="p-4 border-t border-brand-border space-y-4">
-          <div className="space-y-2">
+        <div className="p-4 border-t border-brand-border space-y-6">
+          <div className="space-y-4">
             <div className="flex items-center gap-2 px-1 mb-1">
               <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
-              <span className="text-[10px] font-bold text-brand-muted uppercase tracking-wider">System AI</span>
+              <span className="text-[10px] font-bold text-brand-muted uppercase tracking-wider">System AI Configuration</span>
             </div>
-            <CustomSelect 
-              options={modelConfigs.map(m => ({ label: m.name, value: m.id }))}
-              value={systemAiModelId || ''}
-              onChange={(val) => setSystemAiModelId(val)}
-              placeholder="Select System AI..."
-              className="mt-1"
-            />
-            <p className="px-1 text-[9px] text-brand-muted leading-tight">
-              Model used for AI assistance and auto-filling inputs.
+            
+            <div className="space-y-1.5">
+              <label className="px-1 text-[9px] font-bold text-brand-muted uppercase tracking-tight">System LLM (Generative)</label>
+              <CustomSelect 
+                options={modelConfigs.filter(m => m.model_type !== 'EMBEDDING').map(m => ({ label: m.name, value: m.id }))}
+                value={systemAiModelId || ''}
+                onChange={(val) => setSystemAiModelId(val)}
+                placeholder="Select System LLM..."
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="px-1 text-[9px] font-bold text-brand-muted uppercase tracking-tight">Embedding Model (RAG)</label>
+              <CustomSelect 
+                options={[
+                  { label: '--- None / Unset ---', value: 'null' },
+                  ...modelConfigs.filter(m => m.model_type === 'EMBEDDING').map(m => ({ label: m.name, value: m.id }))
+                ]}
+                value={embeddingModelId || 'null'}
+                onChange={(val) => setEmbeddingModelId(val === 'null' ? null : val)}
+                placeholder="Select Embedding..."
+              />
+            </div>
+
+            <p className="px-1 text-[9px] text-brand-muted leading-tight border-l-2 border-indigo-500/30 pl-3 py-1">
+              Used for AI assistance, auto-filling, and vector ingestion.
             </p>
           </div>
 
@@ -490,6 +523,13 @@ const SettingsPage = () => {
                               {model.isDefault && (
                                 <span className="bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-widest">Default</span>
                               )}
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-widest ${
+                                model.model_type === 'EMBEDDING' 
+                                  ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600' 
+                                  : 'bg-blue-100 dark:bg-blue-900/40 text-blue-600'
+                              }`}>
+                                {model.model_type || 'GENERATIVE'}
+                              </span>
                             </div>
                             <p className="text-xs text-brand-muted line-clamp-1">{model.description || 'No description'}</p>
                             <div className="flex flex-wrap items-center gap-2 mt-2">
@@ -583,11 +623,13 @@ const SettingsPage = () => {
                           category === 'Files & Documents' ? 'bg-amber-500/10 text-amber-500' :
                           category === 'Search' ? 'bg-blue-500/10 text-blue-500' :
                           category === 'Web' ? 'bg-emerald-500/10 text-emerald-500' :
+                          category === 'RAG / DATABASE' ? 'bg-cyan-500/10 text-cyan-500' :
                           'bg-indigo-500/10 text-indigo-500'
                         }`}>
                           {category === 'Search' && <Search className="w-5 h-5" />}
                           {category === 'Web' && <Sparkles className="w-5 h-5" />}
                           {category === 'Files & Documents' && <FileCode className="w-5 h-5" />}
+                          {category === 'RAG / DATABASE' && <Database className="w-5 h-5" />}
                           {category === 'Other' && <Wrench className="w-5 h-5" />}
                         </div>
                         <div className="flex-1">
@@ -607,6 +649,7 @@ const SettingsPage = () => {
                                   {tool.id === 'serper' && <Search className="w-5 h-5" />}
                                   {tool.id === 'scrape' && <Sparkles className="w-5 h-5" />}
                                   {tool.id === 'ocr' && <Eye className="w-5 h-5" />}
+                                  {tool.id === 'search_knowledge_base' && <Database className="w-5 h-5" />}
                                   {tool.category === 'Files & Documents' && (
                                     tool.id.includes('search') ? <Search className="w-5 h-5" /> : 
                                     tool.id.includes('write') ? <Edit className="w-5 h-5" /> :
@@ -614,7 +657,8 @@ const SettingsPage = () => {
                                     tool.id.includes('txt') ? <Type className="w-5 h-5" /> :
                                     <FileCode className="w-5 h-5" />
                                   )}
-                                  {!(['serper', 'scrape', 'ocr'].includes(tool.id) || tool.category === 'Files & Documents') && <Wrench className="w-5 h-5" />}
+                                  {!(['serper', 'scrape', 'ocr', 'search_knowledge_base'].includes(tool.id) || tool.category === 'Files & Documents' || tool.category === 'RAG / DATABASE') && <Wrench className="w-5 h-5" />}
+                                  {tool.category === 'RAG / DATABASE' && tool.id !== 'search_knowledge_base' && <Database className="w-5 h-5" />}
                                 </div>
                                 <div>
                                   <h3 className="font-bold text-brand-text flex items-center gap-2">
@@ -921,6 +965,10 @@ const SettingsPage = () => {
               </div>
             </div>
           )}
+
+          {activeTab === 'knowledge_base' && (
+            <KnowledgeBaseSettings />
+          )}
         </div>
       </main>
 
@@ -1064,6 +1112,26 @@ const SettingsPage = () => {
               </div>
 
               <div className="md:col-span-2">
+                <label className="block text-xs font-bold text-brand-muted uppercase tracking-wider mb-2 text-indigo-500">Model Type</label>
+                <div className="grid grid-cols-2 gap-4">
+                  <button 
+                    onClick={() => setNewModel({...newModel, model_type: 'GENERATIVE'})}
+                    className={`flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all ${newModel.model_type === 'GENERATIVE' ? 'bg-indigo-600/10 border-indigo-600 text-indigo-600 shadow-lg shadow-indigo-600/10' : 'bg-brand-bg border-brand-border text-brand-muted hover:border-brand-text'}`}
+                  >
+                    <Sparkles className="w-5 h-5" />
+                    <span className="text-xs font-bold">Generative (Chat)</span>
+                  </button>
+                  <button 
+                    onClick={() => setNewModel({...newModel, model_type: 'EMBEDDING'})}
+                    className={`flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all ${newModel.model_type === 'EMBEDDING' ? 'bg-emerald-600/10 border-emerald-600 text-emerald-600 shadow-lg shadow-emerald-600/10' : 'bg-brand-bg border-brand-border text-brand-muted hover:border-brand-text'}`}
+                  >
+                    <Database className="w-5 h-5" />
+                    <span className="text-xs font-bold">Embedding (RAG)</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="md:col-span-2">
                 <label className="block text-xs font-bold text-brand-muted uppercase tracking-wider mb-2">Credential / Provider</label>
                 <CustomSelect 
                   placeholder="Select a credential..."
@@ -1089,55 +1157,59 @@ const SettingsPage = () => {
                 />
               </div>
 
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <label className="block text-xs font-bold text-brand-muted uppercase tracking-wider">Temperature</label>
-                  <span className="text-[10px] font-bold text-indigo-500 bg-indigo-50 dark:bg-indigo-500/10 px-2 py-0.5 rounded-md">
-                    {newModel.temperature !== undefined ? newModel.temperature : 'Provider Default'}
-                  </span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <input 
-                    type="range"
-                    min="0"
-                    max="2"
-                    step="0.1"
-                    className="flex-1 h-2 bg-brand-bg border border-brand-border rounded-lg appearance-none cursor-pointer accent-indigo-600 mt-2"
-                    value={newModel.temperature ?? 0.7}
-                    onChange={(e) => setNewModel({...newModel, temperature: parseFloat(e.target.value)})}
-                  />
-                  {newModel.temperature !== undefined && newModel.temperature !== null && (
-                    <button 
-                      onClick={() => setNewModel({...newModel, temperature: null})}
-                      className="mt-2 text-[10px] uppercase font-bold text-slate-400 hover:text-red-500 transition-colors"
-                    >
-                      Reset
-                    </button>
-                  )}
-                </div>
-              </div>
+              {newModel.model_type === 'GENERATIVE' && (
+                <>
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <label className="block text-xs font-bold text-brand-muted uppercase tracking-wider">Temperature</label>
+                      <span className="text-[10px] font-bold text-indigo-500 bg-indigo-50 dark:bg-indigo-500/10 px-2 py-0.5 rounded-md">
+                        {newModel.temperature !== undefined && newModel.temperature !== null ? newModel.temperature : 'Provider Default'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <input 
+                        type="range"
+                        min="0"
+                        max="2"
+                        step="0.1"
+                        className="flex-1 h-2 bg-brand-bg border border-brand-border rounded-lg appearance-none cursor-pointer accent-indigo-600 mt-2"
+                        value={newModel.temperature ?? 0.7}
+                        onChange={(e) => setNewModel({...newModel, temperature: parseFloat(e.target.value)})}
+                      />
+                      {newModel.temperature !== undefined && newModel.temperature !== null && (
+                        <button 
+                          onClick={() => setNewModel({...newModel, temperature: null})}
+                          className="mt-2 text-[10px] uppercase font-bold text-brand-muted hover:text-red-500 transition-colors"
+                        >
+                          Reset
+                        </button>
+                      )}
+                    </div>
+                  </div>
 
-              <div>
-                <label className="block text-xs font-bold text-brand-muted uppercase tracking-wider mb-2">Max Tokens</label>
-                <input 
-                  type="number"
-                  placeholder="Provider Default"
-                  className="w-full bg-brand-bg border border-brand-border rounded-xl px-4 py-3 text-brand-text outline-none focus:ring-2 focus:ring-indigo-600 transition-all text-sm"
-                  value={newModel.maxTokens ?? ''}
-                  onChange={(e) => setNewModel({...newModel, maxTokens: e.target.value === '' ? null : parseInt(e.target.value)})}
-                />
-              </div>
+                  <div>
+                    <label className="block text-xs font-bold text-brand-muted uppercase tracking-wider mb-2">Max Tokens</label>
+                    <input 
+                      type="number"
+                      placeholder="Provider Default"
+                      className="w-full bg-brand-bg border border-brand-border rounded-xl px-4 py-3 text-brand-text outline-none focus:ring-2 focus:ring-indigo-600 transition-all text-sm"
+                      value={newModel.maxTokens ?? ''}
+                      onChange={(e) => setNewModel({...newModel, maxTokens: e.target.value === '' ? null : parseInt(e.target.value)})}
+                    />
+                  </div>
 
-              <div>
-                <label className="block text-xs font-bold text-brand-muted uppercase tracking-wider mb-2">Max Completion Tokens</label>
-                <input 
-                  type="number"
-                  placeholder="Provider Default"
-                  className="w-full bg-brand-bg border border-brand-border rounded-xl px-4 py-3 text-brand-text outline-none focus:ring-2 focus:ring-indigo-600 transition-all text-sm"
-                  value={newModel.maxCompletionTokens ?? ''}
-                  onChange={(e) => setNewModel({...newModel, maxCompletionTokens: e.target.value === '' ? null : parseInt(e.target.value)})}
-                />
-              </div>
+                  <div>
+                    <label className="block text-xs font-bold text-brand-muted uppercase tracking-wider mb-2">Max Completion Tokens</label>
+                    <input 
+                      type="number"
+                      placeholder="Provider Default"
+                      className="w-full bg-brand-bg border border-brand-border rounded-xl px-4 py-3 text-brand-text outline-none focus:ring-2 focus:ring-indigo-600 transition-all text-sm"
+                      value={newModel.maxCompletionTokens ?? ''}
+                      onChange={(e) => setNewModel({...newModel, maxCompletionTokens: e.target.value === '' ? null : parseInt(e.target.value)})}
+                    />
+                  </div>
+                </>
+              )}
 
               <div className="md:col-span-2">
                 <label className="flex items-center gap-3 p-4 bg-brand-bg border border-brand-border rounded-2xl cursor-pointer hover:bg-brand-bg/50 hover:text-indigo-600 hover:border-indigo-600/30 transition-all">
