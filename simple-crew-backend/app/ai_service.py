@@ -1,8 +1,42 @@
 from typing import Optional
 from crewai import LLM
 from sqlmodel import Session, select
-from .models import AppSettings, LLMModel, Credential
+from .models import AppSettings, LLMModel, Credential, ModelType
 from .database import engine
+import os
+
+ROOT_USER_ID = "00000000-0000-0000-0000-000000000000"
+
+def get_embedding_key(session: Session) -> Optional[str]:
+    """Recupera a API Key do modelo de embedding configurado no sistema."""
+    settings = session.exec(select(AppSettings).where(AppSettings.user_id == ROOT_USER_ID)).first()
+    if not settings or not settings.embedding_model_id:
+        return os.getenv("OPENAI_API_KEY")
+        
+    model = session.get(LLMModel, settings.embedding_model_id)
+    if not model:
+        return os.getenv("OPENAI_API_KEY")
+        
+    credential = session.get(Credential, model.credential_id)
+    return credential.key if credential else os.getenv("OPENAI_API_KEY")
+
+def get_embedding_model_config(session: Session) -> dict:
+    """Retorna a configuração completa (key e model_name) do embedding."""
+    settings = session.exec(select(AppSettings).where(AppSettings.user_id == ROOT_USER_ID)).first()
+    
+    # Defaults (No fallback to env var to allow "Safety Lock" when not selected)
+    api_key = None
+    model_name = "text-embedding-3-small"
+    
+    if settings and settings.embedding_model_id:
+        model = session.get(LLMModel, settings.embedding_model_id)
+        if model:
+            model_name = model.model_name
+            credential = session.get(Credential, model.credential_id)
+            if credential:
+                api_key = credential.key
+                
+    return {"api_key": api_key, "model_name": model_name}
 
 def get_system_llm(session: Session, root_user_id: str) -> Optional[LLM]:
     # 1. Pega o ID do modelo nas configurações

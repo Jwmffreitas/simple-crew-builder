@@ -27,12 +27,25 @@ from .schemas import (
 )
 from .exporter import generate_python_project
 from .ai_service import generate_suggestion, generate_bulk_suggestion, generate_task_bulk_suggestion
+from .core.database.neo4j_db import neo4j_manager, get_neo4j_session
+from neo4j import Session as Neo4jSession
+from .routes import knowledge_base
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Inicializa o banco e o usuário seed no startup
+    # Inicializa o banco SQL (SQLModel) e o usuário seed no startup
     init_db()
+    
+    # Inicializa o driver do Neo4j
+    neo4j_manager.init_driver()
+    
+    # Garante que o índice vetorial exista
+    neo4j_manager.create_vector_index()
+    
     yield
+    
+    # Fecha o driver do Neo4j no encerramento do app
+    neo4j_manager.close()
 
 app = FastAPI(
     title="SimpleCrew Backend API",
@@ -40,6 +53,7 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+app.include_router(knowledge_base.router)
 
 # Setup CORS para permitir conexão com o Servidor Vite do Frontend (React)
 app.add_middleware(
@@ -53,6 +67,16 @@ app.add_middleware(
 @app.get("/")
 def home():
     return {"message": "SimpleCrew API Health status: Operacional! 🚀"}
+
+@app.get("/api/neo4j/health")
+async def neo4j_health(session: Neo4jSession = Depends(get_neo4j_session)):
+    """Rota de Teste de Vida para o Neo4j."""
+    try:
+        result = session.run("RETURN 'Conexão com Neo4j estabelecida!' AS message")
+        record = result.single()
+        return {"status": "ok", "message": record["message"]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro na conexão com Neo4j: {str(e)}")
 
 @app.post("/api/v1/run-crew")
 async def execute_crew(

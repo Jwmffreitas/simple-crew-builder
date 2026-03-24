@@ -50,5 +50,22 @@ services:
     environment:
       - VITE_API_URL=http://localhost:8000
 
+  # Neo4j Graph & Vector Database
+  neo4j:
+    image: neo4j:5.23.0
+    container_name: simple-crew-neo4j-dev
+    ports:
+      - "7474:7474" # Browser HTTP
+      - "7687:7687" # Bolt
+    environment:
+      - NEO4J_AUTH=neo4j/password
+      - NEO4J_PLUGINS=["apoc"]
+      - NEO4J_dbms_security_procedures_unrestricted=apoc.*
+    volumes:
+      - neo4j_data_dev:/data
+      - neo4j_logs_dev:/logs
+
 volumes:
   postgres_data:
+  neo4j_data_dev:
+  neo4j_logs_dev:

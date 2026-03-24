@@ -4,6 +4,7 @@ import { useShallow } from 'zustand/shallow';
 import { User, Trash2, ChevronDown, ChevronUp, CheckSquare, Loader2, CheckCircle2, AlertCircle, Clock, Cpu, Link, Settings, Package, Terminal, Plus, X } from 'lucide-react';
 import { useStore } from '../store';
 import type { AgentNodeData, NodeStatus } from '../types';
+import { ToolConfigurationModal } from '../components/ToolConfigurationModal';
 
 export const AgentNode = memo(({ id, data }: NodeProps<Node<AgentNodeData, 'agent'>>) => {
   const { deleteNode, toggleCollapse, updateNodeData, nodes, onConnect, setActiveNode, mcpServers, customTools, globalTools } = useStore(
@@ -24,6 +25,9 @@ export const AgentNode = memo(({ id, data }: NodeProps<Node<AgentNodeData, 'agen
   const [isMcpSelectorOpen, setIsMcpSelectorOpen] = useState(false);
   const [isToolSelectorOpen, setIsToolSelectorOpen] = useState(false);
   const [isGlobalSelectorOpen, setIsGlobalSelectorOpen] = useState(false);
+  const [isToolConfigModalOpen, setIsToolConfigModalOpen] = useState(false);
+  const [toolToConfigure, setToolToConfigure] = useState<any>(null);
+  const [editingToolIndex, setEditingToolIndex] = useState<number | null>(null); // Adicionado para edição
   const models = useStore((state) => state.models);
   const status = useStore((state) => (state.nodeStatuses[id] as NodeStatus) || 'idle');
   const errors = useStore((state) => state.nodeErrors[id]);
@@ -327,8 +331,8 @@ export const AgentNode = memo(({ id, data }: NodeProps<Node<AgentNodeData, 'agen
                   <div className="absolute right-0 top-full mt-1 w-52 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl z-[100] p-1 animate-in fade-in zoom-in-95 duration-150 nodrag">
                     <div className="px-2 py-1 text-[9px] font-bold text-slate-400 uppercase border-b border-slate-100 dark:border-slate-700 mb-1">Add CrewAI Tool</div>
                     <div className="max-h-48 overflow-y-auto custom-scrollbar">
-                      {['Search', 'Web', 'Files & Documents'].map(cat => {
-                        const catTools = globalTools.filter(t => t.category === cat && t.isEnabled && !(data.globalToolIds || []).includes(t.id));
+                      {['Search', 'Web', 'Files & Documents', 'RAG / DATABASE'].map(cat => {
+                        const catTools = globalTools.filter(t => t.category === cat && t.isEnabled && !((data as any).globalToolIds || []).some((e: any) => (typeof e === 'string' ? e : e.id) === t.id));
                         if (catTools.length === 0) return null;
                         return (
                           <div key={cat} className="mb-2 last:mb-0">
@@ -338,9 +342,15 @@ export const AgentNode = memo(({ id, data }: NodeProps<Node<AgentNodeData, 'agen
                                 key={tool.id}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  const currentIds = data.globalToolIds || [];
-                                  updateNodeData(id, { globalToolIds: [...currentIds, tool.id] });
-                                  setIsGlobalSelectorOpen(false);
+                                  if (tool.user_config_schema) {
+                                    setToolToConfigure(tool);
+                                    setIsToolConfigModalOpen(true);
+                                    setIsGlobalSelectorOpen(false);
+                                  } else {
+                                    const currentIds = data.globalToolIds || [];
+                                    updateNodeData(id, { globalToolIds: [...currentIds, tool.id] });
+                                    setIsGlobalSelectorOpen(false);
+                                  }
                                 }}
                                 className="w-full text-left px-2 py-1.5 text-[10px] text-slate-600 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded flex items-center justify-between group"
                               >
@@ -351,7 +361,7 @@ export const AgentNode = memo(({ id, data }: NodeProps<Node<AgentNodeData, 'agen
                           </div>
                         );
                       })}
-                      {globalTools.filter(t => t.isEnabled && !(data.globalToolIds || []).includes(t.id)).length === 0 && (
+                      {globalTools.filter(t => t.isEnabled && !((data as any).globalToolIds || []).some((e: any) => (typeof e === 'string' ? e : e.id) === t.id)).length === 0 && (
                         <div className="px-2 py-2 text-[9px] text-slate-400 italic text-center">No more tools enabled</div>
                       )}
                     </div>
@@ -361,19 +371,29 @@ export const AgentNode = memo(({ id, data }: NodeProps<Node<AgentNodeData, 'agen
             </div>
             <div className="flex flex-wrap gap-1 min-h-[1.25rem]">
               {(data.globalToolIds || []).length > 0 ? (
-                (data.globalToolIds || []).map(gtid => {
-                  const tool = globalTools.find(t => t.id === gtid);
+                (data.globalToolIds || []).map((gtid, index) => {
+                  const actualId = typeof gtid === 'string' ? gtid : (gtid as any).id;
+                  const tool = globalTools.find(t => t.id === actualId);
                   if (!tool) return null;
                   return (
                     <span 
-                      key={gtid} 
-                      className="px-1.5 py-0.5 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 text-[10px] font-medium rounded border border-blue-100 dark:border-blue-800/50 truncate max-w-full flex items-center gap-1 group/chip"
+                      key={actualId} 
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        if (tool.user_config_schema) {
+                          setToolToConfigure(tool);
+                          setEditingToolIndex(index);
+                          setIsToolConfigModalOpen(true);
+                        }
+                      }}
+                      className={`px-1.5 py-0.5 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 text-[10px] font-medium rounded border border-blue-100 dark:border-blue-800/50 truncate max-w-full flex items-center gap-1 group/chip transition-all ${tool.user_config_schema ? 'cursor-help hover:border-blue-400' : ''}`}
+                      title={tool.user_config_schema ? 'Double-click to configure' : ''}
                     >
                       {tool.name}
                       <button 
                         onClick={(e) => {
                           e.stopPropagation();
-                          updateNodeData(id, { globalToolIds: (data.globalToolIds || []).filter(sid => sid !== gtid) });
+                          updateNodeData(id, { globalToolIds: (data.globalToolIds || []).filter((_, i) => i !== index) });
                         }}
                         className="opacity-0 group-hover/chip:opacity-100 p-0.5 hover:text-red-500 transition-opacity"
                       >
@@ -414,6 +434,29 @@ export const AgentNode = memo(({ id, data }: NodeProps<Node<AgentNodeData, 'agen
       <Handle type="source" position={Position.Bottom} id="bottom-source" className="w-2 h-2 bg-gray-400 border-none hover:bg-blue-500 transition-colors" />
       <Handle type="target" position={Position.Left} id="left-target" className="w-2 h-2 bg-gray-400 border-none hover:bg-blue-500 transition-colors" />
       <Handle type="source" position={Position.Left} id="left-source" className="w-2 h-2 bg-gray-400 border-none hover:bg-blue-500 transition-colors" />
+
+      {toolToConfigure && (
+        <ToolConfigurationModal
+          tool={toolToConfigure}
+          isOpen={isToolConfigModalOpen}
+          initialConfig={editingToolIndex !== null ? (data.globalToolIds![editingToolIndex] as any).config : undefined}
+          onClose={() => {
+            setIsToolConfigModalOpen(false);
+            setToolToConfigure(null);
+            setEditingToolIndex(null);
+          }}
+          onSave={(config) => {
+            const currentIds = [...(data.globalToolIds || [])];
+            if (editingToolIndex !== null) {
+                currentIds[editingToolIndex] = { id: toolToConfigure.id, config };
+            } else {
+                currentIds.push({ id: toolToConfigure.id, config });
+            }
+            updateNodeData(id, { globalToolIds: currentIds });
+            setEditingToolIndex(null);
+          }}
+        />
+      )}
 
       {/* Global Click Handler to close menus */}
       {(isMcpSelectorOpen || isToolSelectorOpen || isGlobalSelectorOpen) && (

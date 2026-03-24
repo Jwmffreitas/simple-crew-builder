@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useStore } from '../store';
-import { X, ChevronDown, ChevronUp, Send, Copy, Check, FileText } from 'lucide-react';
+import { X, ChevronDown, ChevronUp, Send, Copy, Check, FileText, Trash2 } from 'lucide-react';
 import Prism from 'prismjs';
 import 'prismjs/themes/prism-tomorrow.css';
 import 'prismjs/components/prism-python';
@@ -12,6 +12,7 @@ import 'prismjs/components/prism-json';
 import 'prismjs/components/prism-markdown';
 import 'prismjs/components/prism-bash';
 import toast from 'react-hot-toast';
+import { ConfirmationModal } from './ConfirmationModal';
 
 type Message = {
   id: string;
@@ -79,15 +80,18 @@ export function ResizableChatPanel() {
   const [isResizing, setIsResizing] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   
-  const [messages, setMessages] = useState<Message[]>([
+  const initialMessages: Message[] = [
     {
       id: 'welcome-1',
       role: 'assistant',
       content: 'Hello! I am connected to your Crew. How can we help you today?'
     }
-  ]);
+  ];
+
+  const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
 
   const panelRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -246,6 +250,16 @@ export function ResizableChatPanel() {
     }
   };
 
+  const handleClearChat = () => {
+    if (messages.length <= 1) return;
+    setIsConfirmModalOpen(true);
+  };
+
+  const confirmClearChat = () => {
+    setMessages(initialMessages);
+    toast.success('Conversation cleared');
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -279,6 +293,14 @@ export function ResizableChatPanel() {
           <h3 className="text-sm font-bold text-brand-text">Interactive Chat</h3>
         </div>
         <div className="flex items-center gap-1">
+          <button
+            onClick={handleClearChat}
+            disabled={messages.length <= 1 || isLoading}
+            className="p-1.5 rounded-md hover:bg-red-500/10 text-brand-muted hover:text-red-500 transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
+            title="Clear conversation"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
           <button
             onClick={() => setIsMinimized(!isMinimized)}
             className="p-1.5 rounded-md hover:bg-brand-bg text-brand-muted hover:text-brand-text transition-colors"
@@ -425,6 +447,16 @@ export function ResizableChatPanel() {
       {isResizing && (
         <div className="fixed inset-0 z-[100] cursor-ns-resize" />
       )}
+
+      <ConfirmationModal
+        isOpen={isConfirmModalOpen}
+        onClose={() => setIsConfirmModalOpen(false)}
+        onConfirm={confirmClearChat}
+        title="Clear Conversation"
+        message="Are you sure you want to clear the entire chat history? This action cannot be undone."
+        variant="warning"
+        confirmText="Yes, clear it"
+      />
     </div>
   );
 }

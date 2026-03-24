@@ -72,3 +72,7 @@ coverage.xml
 workspaces/
 
 releases/
+
+# Storage
+simple-crew-backend/storage/documents/*
+!simple-crew-backend/storage/documents/.gitkeep

@@ -2,7 +2,12 @@ import uuid
 from datetime import datetime
 from typing import Optional, Dict, Any
 from sqlalchemy import Column, DateTime, func, JSON
+from enum import Enum
 from sqlmodel import SQLModel, Field, Relationship
+
+class ModelType(str, Enum):
+    GENERATIVE = "GENERATIVE"
+    EMBEDDING = "EMBEDDING"
 
 class User(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
@@ -106,6 +111,7 @@ class LLMModel(SQLModel, table=True):
     max_tokens: Optional[int] = Field(default=None, sa_column_kwargs={"nullable": True})
     max_completion_tokens: Optional[int] = Field(default=None, sa_column_kwargs={"nullable": True})
     is_default: bool = Field(default=False)
+    model_type: ModelType = Field(default=ModelType.GENERATIVE)
     
     # Relacionamentos
     credential_id: uuid.UUID = Field(foreign_key="credential.id")
@@ -176,6 +182,7 @@ class Workspace(SQLModel, table=True):
 class AppSettings(SQLModel, table=True):
     user_id: uuid.UUID = Field(foreign_key="user.id", primary_key=True)
     system_ai_model_id: Optional[uuid.UUID] = Field(default=None, foreign_key="llmmodel.id", sa_column_kwargs={"nullable": True})
+    embedding_model_id: Optional[uuid.UUID] = Field(default=None, foreign_key="llmmodel.id", sa_column_kwargs={"nullable": True})
     active_workspace_id: Optional[uuid.UUID] = Field(default=None, foreign_key="workspace.id", sa_column_kwargs={"nullable": True})
     
     user: User = Relationship(back_populates="settings")

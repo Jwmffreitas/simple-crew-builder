@@ -11,7 +11,7 @@ export interface AgentNodeData extends Record<string, unknown> {
   modelId?: string;
   mcpServerIds?: string[];
   customToolIds?: string[];
-  globalToolIds?: string[];
+  globalToolIds?: (string | { id: string; config: Record<string, any> })[];
   function_calling_llm_id?: string;
   max_iter?: number;
   max_rpm?: number;
@@ -41,7 +41,7 @@ export interface TaskNodeData extends Record<string, unknown> {
   expected_output: string;
   context?: string[];
   customToolIds?: string[];
-  globalToolIds?: string[];
+  globalToolIds?: (string | { id: string; config: Record<string, any> })[];
   async_execution?: boolean;
   human_input?: boolean;
   output_file?: string;
@@ -118,6 +118,8 @@ export interface AppNotification {
   visible: boolean;
 }
 
+export type ModelType = 'GENERATIVE' | 'EMBEDDING';
+
 export interface ModelConfig {
   id: string;
   name: string;
@@ -129,6 +131,7 @@ export interface ModelConfig {
   maxTokens?: number | null;
   maxCompletionTokens?: number | null;
   isDefault: boolean;
+  model_type: ModelType;
 }
 
 export interface ToolConfig {
@@ -139,6 +142,17 @@ export interface ToolConfig {
   apiKey?: string;
   requiresKey: boolean;
   category?: string;
+  user_config_schema?: {
+    fields: Record<string, {
+      type: 'string' | 'number' | 'boolean' | 'select';
+      label: string;
+      placeholder?: string;
+      description?: string;
+      required?: boolean;
+      options?: { label: string; value: any }[];
+      optionsUrl?: string;
+    }>;
+  };
 }
 
 export interface CustomTool {
@@ -172,6 +186,20 @@ export interface WorkspaceFile {
   path: string;
   is_dir: boolean;
   children?: WorkspaceFile[];
+}
+
+export interface KnowledgeBase {
+  id: string;
+  name: string;
+  description?: string;
+  created_at: string;
+}
+
+export interface KnowledgeBaseDocument {
+  id: string;
+  filename: string;
+  size?: number;
+  created_at: string;
 }
 
 export interface AppState {
@@ -226,7 +254,9 @@ export interface AppState {
   workspaces: Workspace[];
   activeWorkspaceId: string | null;
   systemAiModelId: string | null;
+  embeddingModelId: string | null;
   setSystemAiModelId: (id: string | null) => void;
+  setEmbeddingModelId: (id: string | null) => void;
   setActiveWorkspaceId: (id: string | null) => void;
   fetchWorkspaces: () => Promise<void>;
   addWorkspace: (workspace: Omit<Workspace, 'id' | 'created_at' | 'updated_at'>) => Promise<void>;
@@ -235,7 +265,7 @@ export interface AppState {
   openWorkspace: (id: string) => Promise<void>;
   fetchSettings: () => Promise<void>;
 
-  updateSettings: (settings: { active_workspace_id?: string | null; system_ai_model_id?: string | null }) => Promise<void>;
+  updateSettings: (settings: { active_workspace_id?: string | null; system_ai_model_id?: string | null; embedding_model_id?: string | null }) => Promise<void>;
 
   theme: 'light' | 'dark';
   toggleTheme: () => void;

@@ -29,6 +29,7 @@ from crewai_tools import (
     TXTSearchTool,
     MCPServerAdapter
 )
+from .tools.knowledge_base_search import get_search_knowledge_base_tool
 from .database import engine
 from sqlmodel import Session, select
 from dotenv import load_dotenv
@@ -418,7 +419,14 @@ def run_crew_stream(graph_data: GraphData, workspace_id: Optional[Any] = None) -
                     global_ids = getattr(node_data, 'globalToolIds', []) or []
                     global_configs = {t.id: t for t in (graph_data.globalTools or [])}
                     
-                    for gid in global_ids:
+                    for entry in global_ids:
+                        gid = entry
+                        config_data = {}
+                        
+                        if isinstance(entry, dict):
+                            gid = entry.get("id")
+                            config_data = entry.get("config", {})
+                            
                         config = global_configs.get(gid)
                         if not config or not config.isEnabled:
                             continue
@@ -431,35 +439,36 @@ def run_crew_stream(graph_data: GraphData, workspace_id: Optional[Any] = None) -
                             elif gid == 'directory_read':
                                 node_tools.append(DirectoryReadTool(directory=workspace_path))
                             elif gid == 'file_read':
-                                # Use workspace-aware version if path available
                                 if workspace_path:
                                     node_tools.append(WorkspaceFileReadTool(workspace_path=workspace_path))
                                 else:
                                     node_tools.append(FileReadTool()) 
                             elif gid == 'file_write':
-                                # Use workspace-aware version if path available
                                 if workspace_path:
                                     node_tools.append(WorkspaceFileWriterTool(workspace_path=workspace_path))
                                 else:
                                     node_tools.append(FileWriterTool())
                             elif gid == 'directory_search':
                                 node_tools.append(DirectorySearchTool(directory=workspace_path))
-                            elif gid == 'pdf_search':
-                                node_tools.append(PDFSearchTool(config={'directory': workspace_path} if workspace_path else {}))
-                            elif gid == 'docx_search':
-                                node_tools.append(DOCXSearchTool(config={'directory': workspace_path} if workspace_path else {}))
-                            elif gid == 'json_search':
-                                node_tools.append(JSONSearchTool(config={'directory': workspace_path} if workspace_path else {}))
-                            elif gid == 'xml_search':
-                                node_tools.append(XMLSearchTool(config={'directory': workspace_path} if workspace_path else {}))
-                            elif gid == 'csv_search':
-                                node_tools.append(CSVSearchTool(config={'directory': workspace_path} if workspace_path else {}))
-                            elif gid == 'mdx_search':
-                                node_tools.append(MDXSearchTool(config={'directory': workspace_path} if workspace_path else {}))
-                            elif gid == 'txt_search':
-                                node_tools.append(TXTSearchTool(config={'directory': workspace_path} if workspace_path else {}))
+                            elif gid == 'search_knowledge_base':
+                                kb_id = config_data.get("knowledge_base_id")
+                                if kb_id:
+                                    node_tools.append(get_search_knowledge_base_tool(kb_id=kb_id))
+                            elif gid in ['pdf_search', 'docx_search', 'json_search', 'xml_search', 'csv_search', 'mdx_search', 'txt_search']:
+                                # RAG Tools: Use provided config (like knowledge_base_id)
+                                tool_config = {'directory': workspace_path} if workspace_path else {}
+                                if config_data:
+                                    tool_config.update(config_data)
+                                
+                                if gid == 'pdf_search': node_tools.append(PDFSearchTool(config=tool_config))
+                                elif gid == 'docx_search': node_tools.append(DOCXSearchTool(config=tool_config))
+                                elif gid == 'json_search': node_tools.append(JSONSearchTool(config=tool_config))
+                                elif gid == 'xml_search': node_tools.append(XMLSearchTool(config=tool_config))
+                                elif gid == 'csv_search': node_tools.append(CSVSearchTool(config=tool_config))
+                                elif gid == 'mdx_search': node_tools.append(MDXSearchTool(config=tool_config))
+                                elif gid == 'txt_search': node_tools.append(TXTSearchTool(config=tool_config))
                             
-                            log_debug(f"Default tool '{gid}' added to {node_name}")
+                            log_debug(f"Default tool '{gid}' added to {node_name} with config: {config_data}")
                         except Exception as ge:
                             log_debug(f"Failed to instantiate default tool '{gid}': {str(ge)}")
 
@@ -622,6 +631,15 @@ def run_crew_stream(graph_data: GraphData, workspace_id: Optional[Any] = None) -
                         "Never attempt to access paths outside this workspace."
                     )
                     
+                    # Se o agente tiver a ferramenta de busca, reforçamos que ele DEVE usar
+                    has_rag = any(getattr(t, 'name', '') == "company_knowledge_search" for t in this_agent_tools)
+                    if has_rag:
+                        workspace_instruction += (
+                            "\n\nCRITICAL: You MUST use the 'company_knowledge_search' tool to look up documentation and code "
+                            "BEFORE answering any questions about the project, architecture, or specific files. "
+                            "Do not rely on your internal knowledge if project-specific information is available."
+                        )
+                    
                     agent_kwargs = {
                         "role": role,
                         "goal": goal,
@@ -708,8 +726,8 @@ def run_crew_stream(graph_data: GraphData, workspace_id: Optional[Any] = None) -
                     target_agent = agents_map[source_agent_id]
                     log_debug(f"Task {task_name} assigned to Agent {target_agent.role if hasattr(target_agent, 'role') else source_agent_id}")
                     
-                    # Resolve ferramentas da Task (Apenas Custom/Global Tools, sem MCP para Tasks como solicitado)
-                    this_task_tools = resolve_node_tools(node.data, f"Task {task_name}", include_mcp=False)
+                    # Resolve ferramentas da Task (Custom/Global Tools + MCP)
+                    this_task_tools = resolve_node_tools(node.data, f"Task {task_name}", include_mcp=True)
                         
                     # Injeção de Prompt na Task para reforçar o workspace (como restrição, não como ordem)
                     workspace_task_instruction = (

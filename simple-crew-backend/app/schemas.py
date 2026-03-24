@@ -1,5 +1,6 @@
 from pydantic import BaseModel, field_validator
 from typing import List, Dict, Optional, Any
+from .models import ModelType
 
 class CustomTool(BaseModel):
     id: str
@@ -19,7 +20,7 @@ class NodeData(BaseModel):
     context: Optional[List[str]] = None
     mcpServerIds: Optional[List[str]] = None
     customToolIds: Optional[List[str]] = None
-    globalToolIds: Optional[List[str]] = None
+    globalToolIds: Optional[List[Any]] = None
     # Permitir chaves adicionais como isCollapsed de forma crua, caso necessite depois
     class Config:
         extra = "allow"
@@ -46,6 +47,7 @@ class ToolConfig(BaseModel):
     apiKey: Optional[str] = None
     requiresKey: bool
     category: Optional[str] = None
+    user_config_schema: Optional[Dict[str, Any]] = None
 
 class GraphData(BaseModel):
     version: Optional[str] = "1.0"
@@ -124,6 +126,7 @@ class LLMModelBase(BaseModel):
     max_tokens: Optional[int] = None
     max_completion_tokens: Optional[int] = None
     is_default: Optional[bool] = False
+    model_type: ModelType = ModelType.GENERATIVE
     credential_id: Any # UUID
 
     @field_validator('temperature', 'max_tokens', 'max_completion_tokens', mode='before')
@@ -153,6 +156,7 @@ class LLMModelUpdate(BaseModel):
     max_tokens: Optional[int] = None
     max_completion_tokens: Optional[int] = None
     is_default: Optional[bool] = None
+    model_type: Optional[ModelType] = None
     credential_id: Optional[Any] = None
 
     @field_validator('temperature', 'max_tokens', 'max_completion_tokens', mode='before')
@@ -237,6 +241,7 @@ class WorkspaceUpdate(BaseModel):
 # Schemas para Configurações do App
 class AppSettingsBase(BaseModel):
     system_ai_model_id: Optional[Any] = None
+    embedding_model_id: Optional[Any] = None
     active_workspace_id: Optional[Any] = None
 
 class AppSettingsRead(AppSettingsBase):
@@ -247,6 +252,7 @@ class AppSettingsRead(AppSettingsBase):
 
 class AppSettingsUpdate(BaseModel):
     system_ai_model_id: Optional[Any] = None
+    embedding_model_id: Optional[Any] = None
     active_workspace_id: Optional[Any] = None
 
 # Sugestões de IA
@@ -281,3 +287,20 @@ class AiTaskBulkSuggestionRequest(BaseModel):
 class AiTaskBulkSuggestionResponse(BaseModel):
     description: str
     expected_output: str
+
+# Knowledge Base Schemas
+class KnowledgeBaseCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+class KnowledgeBaseResponse(BaseModel):
+    id: str
+    name: str
+    description: Optional[str] = None
+    created_at: Any
+
+class KnowledgeBaseDocumentResponse(BaseModel):
+    id: str
+    filename: str
+    size: Optional[int] = None
+    created_at: Any
