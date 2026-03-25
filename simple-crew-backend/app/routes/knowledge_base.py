@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from typing import List
 import os
 import shutil
+import uuid
 from neo4j import Session as Neo4jSession
 from ..core.database.neo4j_db import get_neo4j_session
 from ..schemas import KnowledgeBaseCreate, KnowledgeBaseResponse, KnowledgeBaseDocumentResponse
@@ -170,7 +171,7 @@ async def upload_documents(
                         MERGE (d)-[:BELONGS_TO]->(kb)
                         RETURN d
                         """
-                        neo4j_session.run(f_query, 
+                        session.run(f_query, 
                             kb_id=kb_id, 
                             doc_id=f_doc_id, 
                             filename=f_rel_path, # Nome amigável com path relativo
