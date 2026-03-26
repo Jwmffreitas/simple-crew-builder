@@ -1,3 +1,4 @@
+import copy
 import hmac
 import json as _json
 import os
@@ -216,7 +217,7 @@ async def trigger_webhook(
         raise HTTPException(status_code=404, detail="Project not found")
 
     # Inject resolved inputs into canvas_data crew node inputs
-    canvas_data = dict(project.canvas_data)
+    canvas_data = copy.deepcopy(project.canvas_data)
     nodes = list(canvas_data.get("nodes", []))
     for node in nodes:
         if isinstance(node, dict) and node.get("type") == "crew":
