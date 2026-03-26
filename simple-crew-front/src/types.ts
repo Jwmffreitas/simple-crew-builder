@@ -85,6 +85,7 @@ export interface WebhookNodeData extends Record<string, unknown> {
   fieldMappings?: Record<string, string>;
   enableHmac?: boolean;
   waitForResult?: boolean;
+  isActive?: boolean;
   isCollapsed?: boolean;
 }
 

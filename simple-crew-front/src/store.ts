@@ -334,6 +334,14 @@ export const useStore = create<AppState>((set, get) => ({
       if (!response.ok) return;
       const config = await response.json();
       set({ webhookConfig: config });
+      // Sync backend fields into webhook node data (source of truth for exports)
+      const webhookNode = get().nodes.find(n => n.type === 'webhook');
+      if (webhookNode) {
+        get().updateNodeData(webhookNode.id, {
+          waitForResult: config.wait_for_result,
+          isActive: config.is_active,
+        });
+      }
     } catch {
       // silently ignore
     }
@@ -738,7 +746,10 @@ export const useStore = create<AppState>((set, get) => ({
         activeNodeId: null,
         currentProjectId: null,
         nodeStatuses: {},
-        nodeErrors: {}
+        nodeErrors: {},
+        webhookConfig: null,
+        webhookExecutions: [],
+        isWebhookPanelVisible: false,
       });
 
       get().showNotification("Project uploaded successfully!", "success");
@@ -1316,6 +1327,16 @@ export const useStore = create<AppState>((set, get) => ({
       const hasWebhookNode = get().nodes.some(n => n.type === 'webhook');
       if (hasWebhookNode) {
         await get().provisionWebhook(saved.id);
+        // Sync node data → backend to handle import scenarios where the config is freshly created
+        const webhookNode = get().nodes.find(n => n.type === 'webhook');
+        if (webhookNode) {
+          const nodeData = webhookNode.data as any;
+          await get().updateWebhookConfig(saved.id, {
+            field_mappings: nodeData.fieldMappings || {},
+            wait_for_result: nodeData.waitForResult ?? false,
+            is_active: nodeData.isActive ?? true,
+          });
+        }
       }
 
       toast.success(state.currentProjectId ? "Project updated!" : "Project created successfully!");

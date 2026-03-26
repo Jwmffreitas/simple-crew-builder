@@ -2254,8 +2254,8 @@ export function NodeConfigDrawer() {
                 Map Crew input variables to dot-notation paths in the incoming JSON payload (e.g. <code className="text-orange-400">data.topic</code>).
               </p>
               <div className="flex flex-col gap-2">
-                {Object.entries((data as any).fieldMappings || {}).map(([crewVar, path]) => (
-                  <div key={crewVar} className="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-1.5">
+                {Object.entries((data as any).fieldMappings || {}).map(([crewVar, path], idx) => (
+                  <div key={idx} className="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-1.5">
                     <input
                       value={crewVar}
                       onChange={(e) => {
@@ -2319,7 +2319,7 @@ export function NodeConfigDrawer() {
                 <p className="text-[11px] text-brand-muted opacity-70 leading-relaxed">
                   When enabled, the caller waits synchronously for the Crew to finish and receives the result directly.
                 </p>
-                {webhookConfig?.wait_for_result && (
+                {(webhookConfig?.wait_for_result ?? (data as any).waitForResult) && (
                   <p className="text-[11px] text-amber-400 mt-1 leading-relaxed">
                     The caller will be blocked until the Crew finishes. Avoid for long-running Crews.
                   </p>
@@ -2327,14 +2327,16 @@ export function NodeConfigDrawer() {
               </div>
               <button
                 role="switch"
-                aria-checked={webhookConfig?.wait_for_result ?? false}
+                aria-checked={webhookConfig?.wait_for_result ?? (data as any).waitForResult ?? false}
                 onClick={() => {
+                  const newVal = !(webhookConfig?.wait_for_result ?? (data as any).waitForResult ?? false);
+                  updateNodeData(activeNode.id, { waitForResult: newVal });
                   if (currentProjectId && webhookConfig) {
-                    updateWebhookConfig(currentProjectId, { wait_for_result: !webhookConfig.wait_for_result });
+                    updateWebhookConfig(currentProjectId, { wait_for_result: newVal });
                   }
                 }}
                 className={`relative flex-none w-10 rounded-full border transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-orange-500 ${
-                  webhookConfig?.wait_for_result
+                  (webhookConfig?.wait_for_result ?? (data as any).waitForResult)
                     ? 'bg-orange-500 border-orange-400'
                     : 'bg-slate-700 border-slate-600'
                 }`}
@@ -2342,7 +2344,7 @@ export function NodeConfigDrawer() {
               >
                 <span
                   className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${
-                    webhookConfig?.wait_for_result ? 'translate-x-4' : 'translate-x-0'
+                    (webhookConfig?.wait_for_result ?? (data as any).waitForResult) ? 'translate-x-4' : 'translate-x-0'
                   }`}
                 />
               </button>
@@ -2409,14 +2411,16 @@ export function NodeConfigDrawer() {
               </div>
               <button
                 role="switch"
-                aria-checked={webhookConfig?.is_active ?? true}
+                aria-checked={webhookConfig?.is_active ?? (data as any).isActive ?? true}
                 onClick={() => {
+                  const newVal = !(webhookConfig?.is_active ?? (data as any).isActive ?? true);
+                  updateNodeData(activeNode.id, { isActive: newVal });
                   if (currentProjectId && webhookConfig) {
-                    updateWebhookConfig(currentProjectId, { is_active: !webhookConfig.is_active });
+                    updateWebhookConfig(currentProjectId, { is_active: newVal });
                   }
                 }}
                 className={`relative flex-none w-10 rounded-full border transition-all duration-200 focus:outline-none ${
-                  (webhookConfig?.is_active ?? true)
+                  (webhookConfig?.is_active ?? (data as any).isActive ?? true)
                     ? 'bg-green-500 border-green-400'
                     : 'bg-slate-700 border-slate-600'
                 }`}
@@ -2424,7 +2428,7 @@ export function NodeConfigDrawer() {
               >
                 <span
                   className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${
-                    (webhookConfig?.is_active ?? true) ? 'translate-x-4' : 'translate-x-0'
+                    (webhookConfig?.is_active ?? (data as any).isActive ?? true) ? 'translate-x-4' : 'translate-x-0'
                   }`}
                 />
               </button>
