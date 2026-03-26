@@ -292,11 +292,16 @@ export const MermaidRenderer = React.memo(({ chart }: MermaidRendererProps) => {
             <div className="flex-1 overflow-hidden bg-[#0d1117] relative">
               <TransformWrapper
                 initialScale={1}
-                minScale={0.2}
-                maxScale={8}
+                minScale={0.05}
+                maxScale={20}
                 centerOnInit={true}
+                limitToBounds={false}
                 wheel={{ step: 0.1 }}
-                panning={{ velocityDisabled: false }}
+                panning={{ 
+                  velocityDisabled: false,
+                  allowLeftClickPan: true,
+                  allowRightClickPan: true 
+                }}
               >
                 {({ zoomIn, zoomOut, resetTransform }: any) => (
                   <>
