@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useId } from 'react';
 import mermaid from 'mermaid';
-import { Maximize2, X, FileImage, FileText, AlertCircle } from 'lucide-react';
+import { Maximize2, X, FileImage, FileText, AlertCircle, Plus, Minus, RefreshCw } from 'lucide-react';
+import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { jsPDF } from 'jspdf';
 
 import toast from 'react-hot-toast';
@@ -51,12 +52,23 @@ export const MermaidRenderer = React.memo(({ chart }: MermaidRendererProps) => {
         const ctx = canvas.getContext('2d');
         if (!ctx) throw new Error('Não foi possível obter o contexto 2D');
 
-        const bbox = svgElement.getBoundingClientRect();
-        const width = Math.max(bbox.width, 200); 
-        const height = Math.max(bbox.height, 200);
+        // Lógica NOVA: Usar a viewBox para garantir tamanho gigante/real na exportação
+        let width = 800;
+        let height = 600;
+        const viewBox = svgElement.getAttribute('viewBox');
+        
+        if (viewBox) {
+          const [, , vw, vh] = viewBox.split(' ').map(Number);
+          width = vw || 800;
+          height = vh || 600;
+        } else {
+          const bbox = svgElement.getBoundingClientRect();
+          width = Math.max(bbox.width, 800); 
+          height = Math.max(bbox.height, 600);
+        }
         
         const scale = window.devicePixelRatio || 2;
-        const padding = 40;
+        const padding = 60;
         
         canvas.width = (width + padding) * scale;
         canvas.height = (height + padding) * scale;
@@ -77,18 +89,18 @@ export const MermaidRenderer = React.memo(({ chart }: MermaidRendererProps) => {
           }
         });
 
-        // 2. Injeta estilos de contraste escuro para fundo branco
+        // 2. Injeta estilos de contraste para exportação (Desenhos Brancos, Fontes Pretas)
         const style = document.createElement('style');
         style.textContent = `
           * { color: #000000 !important; }
           text, tspan, p, div, span, .label, .edgeLabel, .nodeLabel { fill: #000000 !important; color: #000000 !important; }
-          .node rect, .node circle, .node polygon, .node path, .cluster rect { stroke: #000000 !important; fill: #ffffff !important; }
+          .node rect, .node circle, .node polygon, .node path, .cluster rect, .actor, .labelBox { stroke: #000000 !important; fill: #ffffff !important; }
           
-          /* CORREÇÃO: Linhas não podem ter preenchimento (fill: none) */
-          .edgePath .path, .flowchart-link { stroke: #000000 !important; fill: none !important; stroke-width: 2px !important; }
+          /* Linhas e Conexões (Pretas para fundo branco de exportação) */
+          .edgePath .path, .flowchart-link, .messageLine0, .messageLine1 { stroke: #000000 !important; fill: none !important; stroke-width: 2px !important; }
           
-          /* As pontas das setas sim recebem preenchimento */
-          .marker, .arrowheadPath { fill: #000000 !important; stroke: none !important; }
+          /* Setas e Marcadores */
+          .marker, .arrowheadPath, #arrowhead { fill: #000000 !important; stroke: none !important; }
         `;
         clone.appendChild(style);
 
@@ -214,7 +226,8 @@ export const MermaidRenderer = React.memo(({ chart }: MermaidRendererProps) => {
       ) : (
         <div 
           ref={diagramRef}
-          className="bg-[#0d1117] rounded-xl border border-brand-border p-6 overflow-hidden flex justify-center items-center min-h-[100px] shadow-lg"
+          // Tema Híbrido: Preview usa Texto Branco (Premium Dark Mode)
+          className="bg-[#0d1117] rounded-xl border border-brand-border p-6 overflow-hidden flex justify-center items-center min-h-[100px] shadow-lg [&_text]:!fill-white [&_.label]:!text-white [&_tspan]:!fill-white [&_div]:!text-white"
           dangerouslySetInnerHTML={{ __html: svg }}
         />
       )}
@@ -276,12 +289,60 @@ export const MermaidRenderer = React.memo(({ chart }: MermaidRendererProps) => {
               </div>
             </div>
 
-            <div className="flex-1 overflow-auto p-12 flex justify-center items-center bg-[#0d1117] custom-scrollbar">
-              <div 
-                ref={modalDiagramRef}
-                className="bg-transparent"
-                dangerouslySetInnerHTML={{ __html: svg }}
-              />
+            <div className="flex-1 overflow-hidden bg-[#0d1117] relative">
+              <TransformWrapper
+                initialScale={1}
+                minScale={0.2}
+                maxScale={8}
+                centerOnInit={true}
+                wheel={{ step: 0.1 }}
+                panning={{ velocityDisabled: false }}
+              >
+                {({ zoomIn, zoomOut, resetTransform }: any) => (
+                  <>
+                    <TransformComponent
+                      wrapperStyle={{ width: '100%', height: '100%' }}
+                      contentStyle={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    >
+                      <div 
+                        ref={modalDiagramRef}
+                        // Força o SVG interno a usar seu próprio tamanho (viewBox) e ignora restrições do Mermaid
+                        // Tema Híbrido: Preview usa Texto Branco para visibilidade no fundo Dark
+                        className="bg-transparent flex items-center justify-center p-8 [&>svg]:!max-w-none [&>svg]:!w-full [&>svg]:!h-full [&>svg]:min-w-[600px] [&_text]:!fill-white [&_.label]:!text-white [&_tspan]:!fill-white [&_div]:!text-white"
+                        dangerouslySetInnerHTML={{ __html: svg }}
+                      />
+                    </TransformComponent>
+                    
+                    {/* Controls Layer */}
+                    <div className="absolute bottom-8 right-8 flex flex-col gap-2 z-20">
+                      <button 
+                        type="button"
+                        onClick={() => zoomIn()}
+                        className="p-3 bg-brand-bg/80 backdrop-blur-md border border-brand-border rounded-xl text-brand-muted hover:text-brand-text transition-all shadow-xl hover:scale-110 active:scale-90"
+                        title="Zoom In"
+                      >
+                        <Plus className="w-5 h-5" />
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={() => zoomOut()}
+                        className="p-3 bg-brand-bg/80 backdrop-blur-md border border-brand-border rounded-xl text-brand-muted hover:text-brand-text transition-all shadow-xl hover:scale-110 active:scale-90"
+                        title="Zoom Out"
+                      >
+                        <Minus className="w-5 h-5" />
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={() => resetTransform()}
+                        className="p-3 bg-brand-bg/80 backdrop-blur-md border border-brand-border rounded-xl text-brand-muted hover:text-brand-text transition-all shadow-xl hover:scale-110 active:scale-90"
+                        title="Reset View"
+                      >
+                        <RefreshCw className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </>
+                )}
+              </TransformWrapper>
             </div>
           </div>
         </div>
