@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
-import { X, Trash2, GripVertical, Cpu, Plus, Sparkles } from 'lucide-react';
+import { X, Trash2, GripVertical, Cpu, Plus, Sparkles, Copy, RefreshCw, Webhook } from 'lucide-react';
 import { HighlightedTextField } from './HighlightedTextField';
 import { useStore } from '../store';
 import type { AppState, ProcessType, AppNode, ToolConfig } from '../types';
@@ -77,6 +77,14 @@ export function NodeConfigDrawer() {
   const suggestTaskBulkAiContent = useStore((state: AppState) => state.suggestTaskBulkAiContent);
   const customTools = useStore((state: AppState) => state.customTools);
   const globalTools = useStore((state: AppState) => state.globalTools);
+  const webhookConfig = useStore((state: AppState) => state.webhookConfig);
+  const updateWebhookConfig = useStore((state: AppState) => state.updateWebhookConfig);
+  const rotateWebhookSecret = useStore((state: AppState) => state.rotateWebhookSecret);
+  const fetchWebhookExecutions = useStore((state: AppState) => state.fetchWebhookExecutions);
+  const webhookExecutions = useStore((state: AppState) => state.webhookExecutions);
+  const setIsWebhookPanelVisible = useStore((state: AppState) => state.setIsWebhookPanelVisible);
+  const currentProjectId = useStore((state: AppState) => state.currentProjectId);
+  const provisionWebhook = useStore((state: AppState) => state.provisionWebhook);
 
   const [localName, setLocalName] = useState('');
   const [nameError, setNameError] = useState(false);
@@ -86,6 +94,10 @@ export function NodeConfigDrawer() {
   const [isGlobalToolSelectorOpen, setIsGlobalToolSelectorOpen] = useState(false);
   const [isChatMappingSelectorOpen, setIsChatMappingSelectorOpen] = useState(false);
   const [loadingFields, setLoadingFields] = useState<Record<string, boolean>>({});
+
+  // -- Webhook state --
+  const [newSecretReveal, setNewSecretReveal] = useState<string | null>(null);
+  const [isRotatingSecret, setIsRotatingSecret] = useState(false);
 
   // -- Tool Configuration Modal State --
   const [isToolConfigModalOpen, setIsToolConfigModalOpen] = useState(false);
@@ -120,6 +132,33 @@ export function NodeConfigDrawer() {
       }
     }
   }, [activeNodeId, nodes]);
+
+  // -- Webhook → Crew inputs sync helper -- //
+  const syncWebhookMappingsToCrew = (updatedMappings: Record<string, string>) => {
+    const crewNode = nodes.find(n => n.type === 'crew');
+    if (!crewNode) return;
+    const crewData = crewNode.data as any;
+    const currentInputs = { ...(crewData.inputs || {}) };
+    const currentWebhookKeys: string[] = crewData.webhookInputKeys || [];
+
+    // Save values of existing webhook-synced keys then remove them
+    const savedValues: Record<string, string> = {};
+    currentWebhookKeys.forEach(k => {
+      savedValues[k] = currentInputs[k] ?? '';
+      delete currentInputs[k];
+    });
+
+    // Re-add from the updated mappings (preserve value if key didn't change)
+    const newWebhookKeys = Object.keys(updatedMappings);
+    newWebhookKeys.forEach(k => {
+      currentInputs[k] = savedValues[k] ?? '';
+    });
+
+    updateNodeData(crewNode.id, {
+      inputs: currentInputs,
+      webhookInputKeys: newWebhookKeys,
+    });
+  };
 
   // -- Sincronização e Ordenação Externa (Store) -- //
   const activeNode = nodes.find((n: AppNode) => n.id === activeNodeId);
@@ -1703,9 +1742,11 @@ export function NodeConfigDrawer() {
                 <button
                   onClick={() => {
                     const currentInputs = (data as any).inputs || {};
+                    const webhookKeys: string[] = (data as any).webhookInputKeys || [];
                     const newId = `input_${Date.now()}`;
                     updateNodeData(activeNode.id, {
-                      inputs: { ...currentInputs, [newId]: '' }
+                      inputs: { ...currentInputs, [newId]: '' },
+                      webhookInputKeys: webhookKeys,
                     });
                   }}
                   className="flex items-center gap-1.5 px-2 py-1 bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 rounded-md text-[10px] font-bold uppercase transition-all hover:bg-blue-500/20 active:scale-95"
@@ -1718,28 +1759,43 @@ export function NodeConfigDrawer() {
 
               <div className="flex flex-col gap-2">
                 {Object.entries((data as any).inputs || {}).map(([key, value], index) => {
+                  const webhookKeys: string[] = (data as any).webhookInputKeys || [];
+                  const isFromWebhook = webhookKeys.includes(key);
                   const isTempKey = key.startsWith('input_');
                   return (
-                    <div key={index} className="flex items-center gap-2 group animate-in fade-in slide-in-from-right-1 duration-200">
+                    <div key={index} className={`flex items-center gap-2 group animate-in fade-in slide-in-from-right-1 duration-200 ${isFromWebhook ? 'opacity-90' : ''}`}>
                       <div className="grid grid-cols-2 gap-2 flex-1">
+                        <div className="relative">
+                          <input
+                            className={`w-full rounded-lg px-2.5 py-1.5 text-xs outline-none transition-all placeholder:opacity-50 ${
+                              isFromWebhook
+                                ? 'bg-orange-500/5 border border-orange-500/30 text-orange-600 dark:text-orange-400 font-mono cursor-not-allowed pr-7'
+                                : 'bg-brand-bg/50 border border-brand-border text-brand-text focus:ring-2 focus:ring-blue-500/40'
+                            }`}
+                            placeholder="Key (e.g. topic)"
+                            value={isFromWebhook ? key : (isTempKey ? '' : key)}
+                            readOnly={isFromWebhook}
+                            onChange={isFromWebhook ? undefined : (e) => {
+                              const newKey = e.target.value;
+                              const webhookKeysInner: string[] = (data as any).webhookInputKeys || [];
+                              if (webhookKeysInner.includes(newKey)) return; // prevent conflict
+                              const currentInputs = { ...(data as any).inputs };
+                              const oldValue = currentInputs[key];
+                              delete currentInputs[key];
+                              currentInputs[newKey || `input_${index}_${Date.now()}`] = oldValue;
+                              updateNodeData(activeNode.id, { inputs: currentInputs });
+                            }}
+                          />
+                          {isFromWebhook && (
+                            <Webhook className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-orange-500/70 pointer-events-none" />
+                          )}
+                        </div>
                         <input
-                          className="bg-brand-bg/50 border border-brand-border rounded-lg px-2.5 py-1.5 text-xs text-brand-text outline-none focus:ring-2 focus:ring-blue-500/40 transition-all placeholder:opacity-50"
-                          placeholder="Key (e.g. topic)"
-                          value={isTempKey ? '' : key}
-                          onChange={(e) => {
-                            const newKey = e.target.value;
-                            const currentInputs = { ...(data as any).inputs };
-                            const oldValue = currentInputs[key];
-                            delete currentInputs[key];
-                            currentInputs[newKey || `input_${index}_${Date.now()}`] = oldValue;
-                            updateNodeData(activeNode.id, { inputs: currentInputs });
-                          }}
-                        />
-                        <input
-                          className="bg-brand-bg/50 border border-brand-border rounded-lg px-2.5 py-1.5 text-xs text-secondary outline-none focus:ring-2 focus:ring-blue-500/40 transition-all font-medium"
-                          placeholder="Value"
+                          className={`bg-brand-bg/50 border border-brand-border rounded-lg px-2.5 py-1.5 text-xs text-secondary outline-none focus:ring-2 focus:ring-blue-500/40 transition-all font-medium ${isFromWebhook ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          placeholder={isFromWebhook ? '(set by webhook)' : 'Value'}
                           value={value as string}
-                          onChange={(e) => {
+                          readOnly={isFromWebhook}
+                          onChange={isFromWebhook ? undefined : (e) => {
                             const newValue = e.target.value;
                             const currentInputs = { ...(data as any).inputs };
                             currentInputs[key] = newValue;
@@ -1747,21 +1803,30 @@ export function NodeConfigDrawer() {
                           }}
                         />
                       </div>
-                      <button
-                        onClick={() => {
-                          const currentInputs = { ...(data as any).inputs };
-                          delete currentInputs[key];
-                          updateNodeData(activeNode.id, { inputs: currentInputs });
-                        }}
-                        className="p-1.5 text-brand-muted hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition-all opacity-0 group-hover:opacity-100"
-                        title="Delete Input"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      {isFromWebhook ? (
+                        <div
+                          className="p-1.5 text-orange-500/40 rounded-lg"
+                          title="Managed by Webhook — remove the mapping there to delete"
+                        >
+                          <Webhook className="w-3.5 h-3.5" />
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            const currentInputs = { ...(data as any).inputs };
+                            delete currentInputs[key];
+                            updateNodeData(activeNode.id, { inputs: currentInputs });
+                          }}
+                          className="p-1.5 text-brand-muted hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                          title="Delete Input"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
                   );
                 })}
-                
+
                 {Object.keys((data as any).inputs || {}).length === 0 && (
                   <div className="text-[10px] text-brand-muted italic py-4 text-center border border-dashed border-brand-border rounded-xl bg-brand-bg/20">
                     No inputs defined. Click "Add Input" to start.
@@ -2112,6 +2177,291 @@ export function NodeConfigDrawer() {
               <p className="text-[11px] text-brand-muted opacity-70">
                 Sent as <code className="text-cyan-400">role: system</code> at the top of the payload, before any history or user message.
               </p>
+            </div>
+          </div>
+        )}
+
+        {type === 'webhook' && (
+          <div className="flex flex-col gap-4">
+            {/* Webhook URL */}
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-bold text-brand-muted uppercase tracking-wider">Webhook URL</label>
+              {webhookConfig?.url ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    readOnly
+                    value={webhookConfig.url}
+                    className="flex-1 bg-brand-bg border border-brand-border rounded-lg px-3 py-2 text-xs text-brand-text font-mono outline-none"
+                  />
+                  <button
+                    onClick={() => navigator.clipboard.writeText(webhookConfig.url)}
+                    className="p-2 rounded-lg text-brand-muted hover:text-brand-text hover:bg-brand-bg transition-colors"
+                    title="Copy URL"
+                  >
+                    <Copy className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  <p className="text-xs text-brand-muted italic">
+                    {currentProjectId ? 'Provisioning…' : 'Save the project to generate the URL.'}
+                  </p>
+                  {currentProjectId && (
+                    <button
+                      onClick={() => provisionWebhook(currentProjectId)}
+                      className="self-start text-xs text-orange-500 hover:text-orange-400 underline"
+                    >
+                      Generate URL
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Field Mappings */}
+            <div className="flex flex-col gap-2 pt-3 border-t border-brand-border/50">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-brand-muted uppercase tracking-wider">Field Mappings</label>
+                <button
+                  onClick={() => {
+                    const current: Record<string, string> = (data as any).fieldMappings || {};
+                    const crewNode = nodes.find(n => n.type === 'crew');
+                    const crewInputKeys = Object.keys((crewNode?.data as any)?.inputs || {});
+                    let n = Object.keys(current).length + 1;
+                    let newKey = `var_${n}`;
+                    while (crewInputKeys.includes(newKey) || newKey in current) {
+                      n++;
+                      newKey = `var_${n}`;
+                    }
+                    const updated = { ...current, [newKey]: '' };
+                    updateNodeData(activeNode.id, { fieldMappings: updated });
+                    if (currentProjectId && webhookConfig) {
+                      updateWebhookConfig(currentProjectId, { field_mappings: updated });
+                    }
+                    syncWebhookMappingsToCrew(updated);
+                  }}
+                  className="p-1 rounded-md text-brand-muted hover:text-orange-500 hover:bg-orange-500/10 transition-colors"
+                  title="Add mapping"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              </div>
+              <p className="text-[11px] text-brand-muted leading-relaxed">
+                Map Crew input variables to dot-notation paths in the incoming JSON payload (e.g. <code className="text-orange-400">data.topic</code>).
+              </p>
+              <div className="flex flex-col gap-2">
+                {Object.entries((data as any).fieldMappings || {}).map(([crewVar, path], idx) => (
+                  <div key={idx} className="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-1.5">
+                    <input
+                      value={crewVar}
+                      onChange={(e) => {
+                        const current: Record<string, string> = { ...(data as any).fieldMappings };
+                        const val = current[crewVar] as string;
+                        delete current[crewVar];
+                        current[e.target.value] = val;
+                        updateNodeData(activeNode.id, { fieldMappings: current });
+                      }}
+                      onBlur={() => {
+                        const currentMappings = (data as any).fieldMappings as Record<string, string>;
+                        if (currentProjectId && webhookConfig) {
+                          updateWebhookConfig(currentProjectId, { field_mappings: currentMappings });
+                        }
+                        syncWebhookMappingsToCrew(currentMappings);
+                      }}
+                      placeholder="crew_var"
+                      className="min-w-0 w-full bg-brand-bg border border-brand-border rounded-lg px-2 py-1.5 text-xs text-brand-text font-mono outline-none focus:border-orange-500"
+                    />
+                    <span className="text-brand-muted text-xs text-center">→</span>
+                    <input
+                      value={path as string}
+                      onChange={(e) => {
+                        const current: Record<string, string> = { ...(data as any).fieldMappings };
+                        current[crewVar] = e.target.value;
+                        updateNodeData(activeNode.id, { fieldMappings: current });
+                      }}
+                      onBlur={() => {
+                        if (currentProjectId && webhookConfig) {
+                          updateWebhookConfig(currentProjectId, { field_mappings: (data as any).fieldMappings });
+                        }
+                      }}
+                      placeholder="payload.path"
+                      className="min-w-0 w-full bg-brand-bg border border-brand-border rounded-lg px-2 py-1.5 text-xs text-brand-text font-mono outline-none focus:border-orange-500"
+                    />
+                    <button
+                      onClick={() => {
+                        const current: Record<string, string> = { ...(data as any).fieldMappings };
+                        delete current[crewVar];
+                        updateNodeData(activeNode.id, { fieldMappings: current });
+                        if (currentProjectId && webhookConfig) {
+                          updateWebhookConfig(currentProjectId, { field_mappings: current });
+                        }
+                        syncWebhookMappingsToCrew(current);
+                      }}
+                      className="p-1 text-brand-muted hover:text-red-500 transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Wait for result toggle */}
+            <div className="flex items-start justify-between gap-3 pt-3 border-t border-brand-border/50">
+              <div className="flex flex-col gap-0.5 flex-1">
+                <span className="text-xs font-bold text-brand-muted uppercase tracking-wider">Wait for Result</span>
+                <p className="text-[11px] text-brand-muted opacity-70 leading-relaxed">
+                  When enabled, the caller waits synchronously for the Crew to finish and receives the result directly.
+                </p>
+                {(data as any).waitForResult && (
+                  <p className="text-[11px] text-amber-400 mt-1 leading-relaxed">
+                    The caller will be blocked until the Crew finishes. Avoid for long-running Crews.
+                  </p>
+                )}
+              </div>
+              <button
+                role="switch"
+                aria-checked={(data as any).waitForResult ?? false}
+                onClick={() => {
+                  const newVal = !((data as any).waitForResult ?? false);
+                  updateNodeData(activeNode.id, { waitForResult: newVal });
+                  if (currentProjectId && webhookConfig) {
+                    updateWebhookConfig(currentProjectId, { wait_for_result: newVal });
+                  }
+                }}
+                className={`relative flex-none w-10 rounded-full border transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-orange-500 ${
+                  (data as any).waitForResult
+                    ? 'bg-orange-500 border-orange-400'
+                    : 'bg-slate-700 border-slate-600'
+                }`}
+                style={{ minWidth: '2.5rem', height: '1.375rem' }}
+              >
+                <span
+                  className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                    (data as any).waitForResult ? 'translate-x-4' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* Token Auth */}
+            <div className="flex flex-col gap-2 pt-3 border-t border-brand-border/50">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-brand-muted uppercase tracking-wider">Token Auth</label>
+                <input
+                  type="checkbox"
+                  checked={(data as any).enableHmac ?? false}
+                  onChange={(e) => updateNodeData(activeNode.id, { enableHmac: e.target.checked })}
+                  className="accent-orange-500"
+                />
+              </div>
+              {(data as any).enableHmac && (
+                <div className="flex flex-col gap-2">
+                  <div className="p-2.5 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                    <p className="text-[11px] text-blue-400 leading-relaxed">
+                      Cole o token gerado diretamente no header <code className="font-mono bg-blue-500/20 px-1 rounded">X-Webhook-Token</code> de cada requisição.
+                    </p>
+                  </div>
+                  <p className="text-[11px] text-brand-muted leading-relaxed">
+                    Current secret: <span className="font-mono">{webhookConfig?.secret || '(not set)'}</span>
+                  </p>
+                  <button
+                    disabled={!currentProjectId || isRotatingSecret}
+                    onClick={async () => {
+                      if (!currentProjectId) return;
+                      setIsRotatingSecret(true);
+                      const secret = await rotateWebhookSecret(currentProjectId);
+                      setIsRotatingSecret(false);
+                      if (secret) setNewSecretReveal(secret);
+                    }}
+                    className="flex items-center gap-1.5 self-start text-xs px-3 py-1.5 rounded-lg bg-orange-500/10 text-orange-500 hover:bg-orange-500/20 transition-colors disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isRotatingSecret ? 'animate-spin' : ''}`} />
+                    Rotate Secret
+                  </button>
+                  {newSecretReveal && (
+                    <div className="flex flex-col gap-1 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                      <p className="text-[10px] text-amber-400 font-bold uppercase tracking-wider">New Secret — Copy now, it will not be shown again</p>
+                      <div className="flex items-center gap-2">
+                        <code className="flex-1 text-xs font-mono text-amber-300 break-all">{newSecretReveal}</code>
+                        <button
+                          onClick={() => { navigator.clipboard.writeText(newSecretReveal); setNewSecretReveal(null); }}
+                          className="p-1 rounded text-amber-400 hover:text-amber-300"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Active toggle */}
+            <div className="flex items-center justify-between gap-3 pt-3 border-t border-brand-border/50">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs font-bold text-brand-muted uppercase tracking-wider">Active</span>
+                <p className="text-[11px] text-brand-muted opacity-70">Deactivate to pause incoming triggers without deleting the config.</p>
+              </div>
+              <button
+                role="switch"
+                aria-checked={webhookConfig?.is_active ?? true}
+                onClick={() => {
+                  if (currentProjectId && webhookConfig) {
+                    updateWebhookConfig(currentProjectId, { is_active: !webhookConfig.is_active });
+                  }
+                }}
+                className={`relative flex-none w-10 rounded-full border transition-all duration-200 focus:outline-none ${
+                  (webhookConfig?.is_active ?? true)
+                    ? 'bg-green-500 border-green-400'
+                    : 'bg-slate-700 border-slate-600'
+                }`}
+                style={{ minWidth: '2.5rem', height: '1.375rem' }}
+              >
+                <span
+                  className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                    (webhookConfig?.is_active ?? true) ? 'translate-x-4' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* Execution history summary */}
+            <div className="flex flex-col gap-2 pt-3 border-t border-brand-border/50">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-brand-muted uppercase tracking-wider">Recent Executions</label>
+                <button
+                  onClick={() => {
+                    if (webhookConfig?.webhook_id) fetchWebhookExecutions(webhookConfig.webhook_id);
+                  }}
+                  className="p-1 rounded text-brand-muted hover:text-brand-text transition-colors"
+                  title="Refresh"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              {webhookExecutions.slice(0, 5).map((exec) => (
+                <div key={exec.id} className="flex items-center justify-between gap-2 px-2 py-1.5 bg-brand-bg/50 rounded-lg border border-brand-border">
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                    exec.status === 'success' ? 'bg-green-500/20 text-green-400' :
+                    exec.status === 'error' ? 'bg-red-500/20 text-red-400' :
+                    exec.status === 'running' ? 'bg-blue-500/20 text-blue-400' :
+                    'bg-yellow-500/20 text-yellow-400'
+                  }`}>{exec.status}</span>
+                  <span className="text-[10px] text-brand-muted">{new Date(exec.created_at).toLocaleString()}</span>
+                </div>
+              ))}
+              {webhookExecutions.length === 0 && (
+                <p className="text-[11px] text-brand-muted italic">No executions yet.</p>
+              )}
+              {webhookExecutions.length > 0 && (
+                <button
+                  onClick={() => setIsWebhookPanelVisible(true)}
+                  className="self-start text-xs text-orange-500 hover:text-orange-400 underline"
+                >
+                  View All
+                </button>
+              )}
             </div>
           </div>
         )}

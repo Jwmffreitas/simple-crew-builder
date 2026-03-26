@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from sqlmodel import Session, select
 from .crew_builder import run_crew_stream
 from .database import init_db, get_session
-from .models import CrewProject, User, Credential, LLMModel, MCPServer, AppSettings, CustomTool, Workspace
+from .models import CrewProject, User, Credential, LLMModel, MCPServer, AppSettings, CustomTool, Workspace, WebhookConfig, WebhookExecution
 from .schemas import (
     GraphData, ProjectCreate, ProjectRead, ProjectUpdate, 
     CredentialCreate, CredentialRead, CredentialUpdate,
@@ -29,7 +29,7 @@ from .exporter import generate_python_project
 from .ai_service import generate_suggestion, generate_bulk_suggestion, generate_task_bulk_suggestion
 from .core.database.neo4j_db import neo4j_manager, get_neo4j_session
 from neo4j import Session as Neo4jSession
-from .routes import knowledge_base
+from .routes import knowledge_base, webhooks
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -54,6 +54,7 @@ app = FastAPI(
     lifespan=lifespan
 )
 app.include_router(knowledge_base.router)
+app.include_router(webhooks.router)
 
 # Setup CORS para permitir conexão com o Servidor Vite do Frontend (React)
 app.add_middleware(
@@ -225,6 +226,14 @@ async def delete_project(project_id: str, session: Session = Depends(get_session
     project = session.get(CrewProject, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Projeto não encontrado")
+    # Delete related records that reference this project
+    webhook_configs = session.exec(select(WebhookConfig).where(WebhookConfig.project_id == project.id)).all()
+    for wc in webhook_configs:
+        session.delete(wc)
+    webhook_executions = session.exec(select(WebhookExecution).where(WebhookExecution.project_id == project.id)).all()
+    for we in webhook_executions:
+        session.delete(we)
+    session.flush()  # Ensure dependents are deleted before the project
     session.delete(project)
     session.commit()
     return {"message": "Projeto removido com sucesso"}

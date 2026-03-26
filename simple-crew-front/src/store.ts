@@ -142,6 +142,9 @@ export const useStore = create<AppState>((set, get) => ({
   isConsoleExpanded: false,
   isUsabilityDrawerOpen: false,
   isChatVisible: false,
+  webhookConfig: null,
+  webhookExecutions: [],
+  isWebhookPanelVisible: false,
   theme: (localStorage.getItem('theme') as 'light' | 'dark') || 'light',
   isSettingsOpen: false,
   credentials: [],
@@ -323,6 +326,75 @@ export const useStore = create<AppState>((set, get) => ({
   setCurrentExplorerWsId: (id) => set({ currentExplorerWsId: id }),
   setIsUsabilityDrawerOpen: (open) => set({ isUsabilityDrawerOpen: open }),
   setIsChatVisible: (visible) => set({ isChatVisible: visible }),
+  setIsWebhookPanelVisible: (visible) => set({ isWebhookPanelVisible: visible }),
+
+  fetchWebhookConfig: async (projectId: string) => {
+    try {
+      const response = await fetch(`${API_URL}/api/v1/webhooks/${projectId}`);
+      if (!response.ok) return;
+      const config = await response.json();
+      set({ webhookConfig: config });
+    } catch {
+      // silently ignore
+    }
+  },
+
+  provisionWebhook: async (projectId: string) => {
+    try {
+      const response = await fetch(`${API_URL}/api/v1/webhooks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_id: projectId }),
+      });
+      if (!response.ok) return null;
+      const config = await response.json();
+      set({ webhookConfig: config });
+      return config;
+    } catch {
+      return null;
+    }
+  },
+
+  updateWebhookConfig: async (projectId: string, data: any) => {
+    try {
+      const response = await fetch(`${API_URL}/api/v1/webhooks/${projectId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (!response.ok) return;
+      const config = await response.json();
+      set({ webhookConfig: config });
+    } catch {
+      // silently ignore
+    }
+  },
+
+  rotateWebhookSecret: async (projectId: string) => {
+    try {
+      const response = await fetch(`${API_URL}/api/v1/webhooks/${projectId}/rotate-secret`, {
+        method: 'POST',
+      });
+      if (!response.ok) return null;
+      const data = await response.json();
+      // Re-fetch config to update masked secret in state
+      await get().fetchWebhookConfig(projectId);
+      return data.secret as string;
+    } catch {
+      return null;
+    }
+  },
+
+  fetchWebhookExecutions: async (webhookId: string) => {
+    try {
+      const response = await fetch(`${API_URL}/api/v1/executions?webhook_id=${webhookId}`);
+      if (!response.ok) return;
+      const executions = await response.json();
+      set({ webhookExecutions: executions });
+    } catch {
+      // silently ignore
+    }
+  },
 
   fetchWorkspaceFiles: async (wsId: string) => {
     try {
@@ -707,6 +779,20 @@ export const useStore = create<AppState>((set, get) => ({
       }
     }
 
+    // Warning (non-blocking): chat and webhook both connected to same crew
+    const crewNodes = state.nodes.filter(n => n.type === 'crew');
+    for (const crewNode of crewNodes) {
+      const incomingTriggers = state.edges
+        .filter(e => e.target === crewNode.id)
+        .map(e => state.nodes.find(n => n.id === e.source)?.type)
+        .filter(Boolean);
+      if (incomingTriggers.includes('chat') && incomingTriggers.includes('webhook')) {
+        if (!errors[crewNode.id]) errors[crewNode.id] = [];
+        // Non-blocking: just a warning logged, not marking invalid
+        console.warn('[CrewAI] Warning: A Crew has both Chat and Webhook triggers connected simultaneously.');
+      }
+    }
+
     set({ nodeErrors: errors });
     return isValid;
   },
@@ -961,8 +1047,9 @@ export const useStore = create<AppState>((set, get) => ({
       const isCrewToAgent = sourceNode.type === 'crew' && targetNode.type === 'agent';
       const isAgentToTask = sourceNode.type === 'agent' && targetNode.type === 'task';
       const isChatToCrew = sourceNode.type === 'chat' && targetNode.type === 'crew';
+      const isWebhookToCrew = sourceNode.type === 'webhook' && targetNode.type === 'crew';
 
-      if (!isCrewToAgent && !isAgentToTask && !isChatToCrew) {
+      if (!isCrewToAgent && !isAgentToTask && !isChatToCrew && !isWebhookToCrew) {
         // Block all illogical loops: task -> agent, agent -> crew, crew -> crew, etc.
         console.warn(`[CrewAI Rules] Invalid connection blocked: ${sourceNode.type} -> ${targetNode.type}`);
         return state;
@@ -1003,6 +1090,19 @@ export const useStore = create<AppState>((set, get) => ({
         };
         // Auto-open text trigger panel
         set({ isChatVisible: true });
+      }
+
+      if (isWebhookToCrew) {
+        newConnection = {
+          ...newConnection,
+          animated: true,
+          style: { stroke: '#f97316', strokeWidth: 2, strokeDasharray: '5 5' }
+        };
+        // Provision webhook config if project is saved
+        const projectId = get().currentProjectId;
+        if (projectId) {
+          get().provisionWebhook(projectId);
+        }
       }
 
       // 4. Sincronizar taskOrder se for Agent -> Task
@@ -1133,8 +1233,17 @@ export const useStore = create<AppState>((set, get) => ({
         currentProjectDescription: project.description || '',
         currentProjectWorkspaceId: project.workspace_id || null,
         nodeStatuses: {},
-        nodeErrors: {}
+        nodeErrors: {},
+        webhookConfig: null,
+        webhookExecutions: [],
       });
+
+      // Auto-fetch webhook config if canvas has a webhook node
+      const hasWebhook = (canvas_data.nodes || []).some((n: any) => n.type === 'webhook');
+      if (hasWebhook) {
+        get().fetchWebhookConfig(project.id);
+      }
+
       toast.success(`Project "${project.name}" loaded!`);
     } catch (error: any) {
       toast.error(error.message);
@@ -1192,13 +1301,20 @@ export const useStore = create<AppState>((set, get) => ({
       if (!response.ok) throw new Error('Failed to save project');
       const saved = await response.json();
 
-      set({ 
+      set({
         currentProjectId: saved.id,
         currentProjectName: saved.name,
         currentProjectDescription: saved.description,
         currentProjectWorkspaceId: saved.workspace_id || null
       });
       await state.fetchProjects();
+
+      // Auto-provision webhook if canvas has a webhook node
+      const hasWebhookNode = get().nodes.some(n => n.type === 'webhook');
+      if (hasWebhookNode) {
+        await get().provisionWebhook(saved.id);
+      }
+
       toast.success(state.currentProjectId ? "Project updated!" : "Project created successfully!");
     } catch (error: any) {
       toast.error(error.message);
@@ -1231,7 +1347,7 @@ export const useStore = create<AppState>((set, get) => ({
     });
   },
 
-  addNodeWithAutoPosition: (type: 'agent' | 'task' | 'crew' | 'chat', data: any) => {
+  addNodeWithAutoPosition: (type: 'agent' | 'task' | 'crew' | 'chat' | 'webhook', data: any) => {
     const state = get();
     const existingNodes = state.nodes;
     

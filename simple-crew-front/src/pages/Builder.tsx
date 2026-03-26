@@ -13,6 +13,8 @@ import { AgentNode } from '../nodes/AgentNode';
 import { TaskNode } from '../nodes/TaskNode';
 import { CrewNode } from '../nodes/CrewNode';
 import { ChatNode } from '../nodes/ChatNode';
+import { WebhookNode } from '../nodes/WebhookNode';
+import { WebhookExecutionsPanel } from '../components/WebhookExecutionsPanel';
 import { Sidebar } from '../components/Sidebar';
 
 import { NodeConfigDrawer } from '../components/NodeConfigDrawer';
@@ -30,6 +32,7 @@ const nodeTypes = {
   task: TaskNode,
   crew: CrewNode,
   chat: ChatNode,
+  webhook: WebhookNode,
 };
 
 const edgeTypes = {
@@ -72,6 +75,8 @@ const FlowCanvas = () => {
       else if (type === 'crew') data = { process: 'sequential', isCollapsed: false };
       else if (type === 'chat') {
         data = { name: 'Chat Trigger', description: 'Start the Crew from a user\'s text message.', isCollapsed: false, inputMapping: 'chat_input' };
+      } else if (type === 'webhook') {
+        data = { name: 'Webhook Trigger', description: 'Trigger your Crew via HTTP POST from external systems.', isCollapsed: false, fieldMappings: {} };
       }
 
       addNode({ id: getId(), type, position, data } as any);
@@ -96,6 +101,7 @@ const FlowCanvas = () => {
           if (node.type === 'agent') return '#3b82f6';
           if (node.type === 'task') return '#10b981';
           if (node.type === 'crew') return '#8b5cf6';
+          if (node.type === 'webhook') return '#f97316';
           return '#e2e8f0';
         }} />
     </ReactFlow>
@@ -149,7 +155,7 @@ function FlowBuilder() {
     }
   }, [id, loadProject, resetProject]);
 
-  const [activeView, setActiveView] = React.useState<'editor' | 'animation'>('editor');
+  const [activeView, setActiveView] = React.useState<'editor' | 'animation' | 'executions'>('editor');
   const [isEditingTitle, setIsEditingTitle] = React.useState(false);
   const [editedTitle, setEditedTitle] = React.useState('');
   
@@ -238,6 +244,17 @@ function FlowBuilder() {
           >
             Animation
           </button>
+          <button
+            onClick={() => setActiveView('executions')}
+            data-testid="tab-view-executions"
+            className={`px-6 py-1.5 text-xs font-bold rounded-lg transition-all duration-300 flex items-center gap-2 ${
+              activeView === 'executions'
+                ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-md scale-105 px-8'
+                : 'text-brand-muted hover:text-orange-500 hover:bg-brand-card/50'
+            }`}
+          >
+            Executions
+          </button>
         </div>
 
         <div className="flex items-center gap-3">
@@ -297,6 +314,11 @@ function FlowBuilder() {
         {/* Animation View - Live Simulation */}
         {activeView === 'animation' && (
           <AnimationView />
+        )}
+
+        {/* Executions View */}
+        {activeView === 'executions' && (
+          <WebhookExecutionsPanel fullPage />
         )}
 
         <UsabilityCardsDrawer />

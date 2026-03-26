@@ -54,6 +54,7 @@ export interface CrewNodeData extends Record<string, unknown> {
   isCollapsed?: boolean;
   agentOrder?: string[];
   inputs?: Record<string, string>;
+  webhookInputKeys?: string[]; // keys synced automatically from webhook field mappings
   verbose?: boolean;
   memory?: boolean;
   cache?: boolean;
@@ -77,11 +78,51 @@ export interface ChatNodeData extends Record<string, unknown> {
   systemMessage?: string;
 }
 
+export interface WebhookNodeData extends Record<string, unknown> {
+  name: string;
+  description: string;
+  webhookId?: string;
+  fieldMappings?: Record<string, string>;
+  enableHmac?: boolean;
+  waitForResult?: boolean;
+  isCollapsed?: boolean;
+}
+
 export type AppNode =
   | Node<AgentNodeData, 'agent'>
   | Node<TaskNodeData, 'task'>
   | Node<CrewNodeData, 'crew'>
-  | Node<ChatNodeData, 'chat'>;
+  | Node<ChatNodeData, 'chat'>
+  | Node<WebhookNodeData, 'webhook'>;
+
+export interface WebhookConfig {
+  id: string;
+  project_id: string;
+  webhook_id: string;
+  url: string;
+  secret?: string;
+  field_mappings: Record<string, string>;
+  is_active: boolean;
+  wait_for_result: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WebhookExecution {
+  id: string;
+  webhook_id: string;
+  project_id: string;
+  status: 'pending' | 'running' | 'success' | 'error';
+  inputs_received: Record<string, any>;
+  raw_payload?: Record<string, any>;
+  field_mappings_used?: Record<string, string>;
+  wait_for_result?: boolean;
+  result?: string;
+  error?: string;
+  started_at?: string;
+  finished_at?: string;
+  created_at: string;
+}
 
 export type AppEdge = Edge;
 
@@ -222,7 +263,7 @@ export interface AppState {
   deleteNode: (nodeId: string) => void;
   updateNodeData: (nodeId: string, data: Partial<any>) => void;
   addNode: (node: AppNode) => void;
-  addNodeWithAutoPosition: (type: 'agent' | 'task' | 'crew' | 'chat', data: any) => void;
+  addNodeWithAutoPosition: (type: 'agent' | 'task' | 'crew' | 'chat' | 'webhook', data: any) => void;
   fetchProjects: () => Promise<void>;
   saveProject: (name: string, description?: string) => Promise<void>;
   updateProjectMetadata: (id: string, name: string, description: string) => Promise<void>;
@@ -279,6 +320,16 @@ export interface AppState {
   setIsUsabilityDrawerOpen: (open: boolean) => void;
   isChatVisible: boolean;
   setIsChatVisible: (visible: boolean) => void;
+
+  webhookConfig: WebhookConfig | null;
+  webhookExecutions: WebhookExecution[];
+  isWebhookPanelVisible: boolean;
+  setIsWebhookPanelVisible: (visible: boolean) => void;
+  fetchWebhookConfig: (projectId: string) => Promise<void>;
+  provisionWebhook: (projectId: string) => Promise<WebhookConfig | null>;
+  updateWebhookConfig: (projectId: string, data: Partial<WebhookConfig>) => Promise<void>;
+  rotateWebhookSecret: (projectId: string) => Promise<string | null>;
+  fetchWebhookExecutions: (webhookId: string) => Promise<void>;
 
   credentials: Credential[];
   fetchCredentials: () => Promise<void>;

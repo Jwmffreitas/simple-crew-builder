@@ -304,3 +304,47 @@ class KnowledgeBaseDocumentResponse(BaseModel):
     filename: str
     size: Optional[int] = None
     created_at: Any
+
+
+# Schemas para Webhook Trigger
+class WebhookConfigCreate(BaseModel):
+    project_id: Any  # UUID
+
+class WebhookConfigRead(BaseModel):
+    id: Any
+    project_id: Any
+    webhook_id: str
+    url: str
+    secret: Optional[str] = None
+    field_mappings: Dict[str, Any]
+    is_active: bool
+    wait_for_result: bool
+    created_at: Any
+    updated_at: Any
+
+    class Config:
+        from_attributes = True
+
+class WebhookConfigUpdate(BaseModel):
+    field_mappings: Optional[Dict[str, Any]] = None
+    secret: Optional[str] = None
+    is_active: Optional[bool] = None
+    wait_for_result: Optional[bool] = None
+
+class WebhookExecutionRead(BaseModel):
+    id: Any
+    webhook_id: str
+    project_id: Any
+    status: str
+    inputs_received: Dict[str, Any]
+    raw_payload: Optional[Dict[str, Any]] = None
+    field_mappings_used: Optional[Dict[str, Any]] = None
+    wait_for_result: Optional[bool] = None
+    result: Optional[str] = None
+    error: Optional[str] = None
+    started_at: Optional[Any] = None
+    finished_at: Optional[Any] = None
+    created_at: Any
+
+    class Config:
+        from_attributes = True

@@ -9,6 +9,12 @@ class ModelType(str, Enum):
     GENERATIVE = "GENERATIVE"
     EMBEDDING = "EMBEDDING"
 
+class ExecutionStatus(str, Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    SUCCESS = "success"
+    ERROR = "error"
+
 class User(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     name: str
@@ -184,5 +190,45 @@ class AppSettings(SQLModel, table=True):
     system_ai_model_id: Optional[uuid.UUID] = Field(default=None, foreign_key="llmmodel.id", sa_column_kwargs={"nullable": True})
     embedding_model_id: Optional[uuid.UUID] = Field(default=None, foreign_key="llmmodel.id", sa_column_kwargs={"nullable": True})
     active_workspace_id: Optional[uuid.UUID] = Field(default=None, foreign_key="workspace.id", sa_column_kwargs={"nullable": True})
-    
+
     user: User = Relationship(back_populates="settings")
+
+
+class WebhookConfig(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    project_id: uuid.UUID = Field(foreign_key="crewproject.id", unique=True, index=True)
+    webhook_id: str = Field(unique=True, index=True)
+    secret: Optional[str] = Field(default=None, sa_column_kwargs={"nullable": True})
+    field_mappings: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
+    is_active: bool = Field(default=True)
+    wait_for_result: bool = Field(default=False)
+
+    created_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), server_default=func.now())
+    )
+    updated_at: datetime = Field(
+        sa_column=Column(
+            DateTime(timezone=True),
+            server_default=func.now(),
+            onupdate=func.now()
+        )
+    )
+
+
+class WebhookExecution(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    webhook_id: str = Field(index=True)
+    project_id: uuid.UUID = Field(foreign_key="crewproject.id")
+    status: ExecutionStatus = Field(default=ExecutionStatus.PENDING)
+    inputs_received: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
+    raw_payload: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON, nullable=True))
+    field_mappings_used: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON, nullable=True))
+    wait_for_result: Optional[bool] = Field(default=None, sa_column_kwargs={"nullable": True})
+    result: Optional[str] = Field(default=None, sa_column_kwargs={"nullable": True})
+    error: Optional[str] = Field(default=None, sa_column_kwargs={"nullable": True})
+
+    started_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"nullable": True})
+    finished_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"nullable": True})
+    created_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), server_default=func.now())
+    )

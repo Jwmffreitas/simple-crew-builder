@@ -999,3 +999,290 @@ def run_crew_stream(graph_data: GraphData, workspace_id: Optional[Any] = None) -
             yield item
         except queue.Empty:
             yield json.dumps({"type": "heartbeat"}) + "\n"
+
+
+def run_crew_sync(graph_data: GraphData, workspace_id: Optional[Any] = None) -> str:
+    """Execute a crew synchronously (no streaming). Returns the final result string."""
+    nodes = {node.id: node for node in graph_data.nodes}
+    edges = graph_data.edges
+
+    crew_node = next((n for n in graph_data.nodes if n.type == 'crew'), None)
+    if not crew_node:
+        raise ValueError("O fluxo não possui um nó de Crew principal.")
+
+    execution_inputs = getattr(crew_node.data, 'inputs', {}) or {}
+    execution_inputs = {k: v for k, v in execution_inputs.items() if not k.startswith('input_')}
+
+    process_type = Process.sequential
+    if crew_node.data.process == "hierarchical":
+        process_type = Process.hierarchical
+
+    agent_nodes = [n for n in graph_data.nodes if n.type == 'agent']
+    task_nodes = [n for n in graph_data.nodes if n.type == 'task']
+
+    with ExitStack() as stack:
+        # --- Resolve workspace ---
+        workspace_path = None
+        with Session(engine) as session:
+            ws_to_use_id = workspace_id
+            if not ws_to_use_id:
+                settings = session.exec(select(AppSettings).where(AppSettings.user_id == ROOT_USER_ID)).first()
+                if settings:
+                    ws_to_use_id = settings.active_workspace_id
+            if ws_to_use_id:
+                ws_record = session.get(Workspace, ws_to_use_id)
+                if ws_record:
+                    workspace_path = os.path.abspath(os.path.join(os.getcwd(), ws_record.path))
+            if not workspace_path:
+                workspace_path = os.path.abspath(os.path.join(os.getcwd(), "workspaces", "default"))
+            if not os.path.exists(workspace_path):
+                os.makedirs(workspace_path, exist_ok=True)
+
+        # --- MCP adapters ---
+        all_mcp_ids = set()
+        for node in agent_nodes:
+            for mid in (getattr(node.data, 'mcpServerIds', []) or []):
+                all_mcp_ids.add(mid)
+
+        mcp_adapters_cache = {}
+        with Session(engine) as session:
+            for mcp_id in all_mcp_ids:
+                mcp_record = session.get(MCPServer, mcp_id)
+                if not mcp_record:
+                    continue
+                try:
+                    if mcp_record.transport_type == 'stdio':
+                        command = mcp_record.command
+                        if command == "npx" and os.name == "nt":
+                            command = "npx.cmd"
+                        env = dict(os.environ)
+                        env["UV_PYTHON"] = "3.12"
+                        if mcp_record.env_vars:
+                            env.update(mcp_record.env_vars)
+                        mcp_args = mcp_record.args or []
+                        if isinstance(mcp_args, dict):
+                            mcp_args = [str(v) for v in mcp_args.values()]
+                        params = StdioServerParameters(command=command, args=mcp_args, env=env)
+                        adapter = MCPServerAdapter(params, connect_timeout=120)
+                        raw_tools = stack.enter_context(adapter)
+                        if raw_tools:
+                            mcp_adapters_cache[str(mcp_id)] = raw_tools
+                except Exception:
+                    pass
+
+        def resolve_tools(node_data):
+            node_tools = []
+            global_ids = getattr(node_data, 'globalToolIds', []) or []
+            global_configs = {t.id: t for t in (graph_data.globalTools or [])}
+            for entry in global_ids:
+                gid = entry
+                config_data = {}
+                if isinstance(entry, dict):
+                    gid = entry.get("id")
+                    config_data = entry.get("config", {})
+                config = global_configs.get(gid)
+                if not config or not config.isEnabled:
+                    continue
+                try:
+                    if gid == 'serper':
+                        node_tools.append(SerperDevTool(api_key=config.apiKey))
+                    elif gid == 'scrape':
+                        node_tools.append(ScrapeWebsiteTool())
+                    elif gid == 'directory_read':
+                        node_tools.append(DirectoryReadTool(directory=workspace_path))
+                    elif gid == 'file_read':
+                        node_tools.append(WorkspaceFileReadTool(workspace_path=workspace_path) if workspace_path else FileReadTool())
+                    elif gid == 'file_write':
+                        node_tools.append(WorkspaceFileWriterTool(workspace_path=workspace_path) if workspace_path else FileWriterTool())
+                    elif gid == 'directory_search':
+                        node_tools.append(DirectorySearchTool(directory=workspace_path))
+                    elif gid == 'search_knowledge_base':
+                        kb_id = config_data.get("knowledge_base_id")
+                        if kb_id:
+                            node_tools.append(get_search_knowledge_base_tool(kb_id=kb_id))
+                except Exception:
+                    pass
+            for mid in (getattr(node_data, 'mcpServerIds', []) or []):
+                tools = mcp_adapters_cache.get(str(mid), [])
+                node_tools.extend(tools)
+            for cid in (getattr(node_data, 'customToolIds', []) or []):
+                tool_def = next((t for t in (graph_data.customTools or []) if t.id == cid), None)
+                if not tool_def:
+                    continue
+                try:
+                    tool_namespace = {
+                        "tool": tool, "BaseModel": BaseModel, "Field": Field,
+                        "os": get_safe_os_module(workspace_path), "json": json,
+                        "Path": get_safe_pathlib(workspace_path), "open": get_safe_open(workspace_path),
+                        "Optional": typing.Optional, "Union": typing.Union,
+                        "List": typing.List, "Dict": typing.Dict,
+                        "Literal": getattr(typing, 'Literal', None),
+                        "WORKSPACE_PATH": workspace_path or "./"
+                    }
+                    tool_locals = {}
+                    exec(tool_def.code, tool_namespace, tool_locals)
+                    found_tool = None
+                    for obj in tool_locals.values():
+                        if isinstance(obj, BaseTool):
+                            found_tool = obj
+                            break
+                    if not found_tool:
+                        for obj in tool_locals.values():
+                            if callable(obj) and hasattr(obj, 'name') and not isinstance(obj, type):
+                                found_tool = obj
+                                break
+                    if found_tool:
+                        node_tools.append(found_tool)
+                except Exception:
+                    pass
+            return node_tools
+
+        # --- Build Agents ---
+        agents_map: Dict[str, Agent] = {}
+        for node in agent_nodes:
+            this_tools = resolve_tools(node.data)
+            agent_llm = None
+            with Session(engine) as session:
+                model_id = getattr(node.data, 'modelId', None)
+                llm_config = None
+                if model_id:
+                    llm_config = session.get(LLMModel, model_id)
+                if not llm_config:
+                    llm_config = session.exec(select(LLMModel).where(LLMModel.is_default == True)).first()
+                if llm_config:
+                    credential = session.get(Credential, llm_config.credential_id)
+                    if credential:
+                        llm_params = {"model": llm_config.model_name, "api_key": credential.key}
+                        if llm_config.temperature is not None: llm_params["temperature"] = llm_config.temperature
+                        if llm_config.max_tokens is not None: llm_params["max_tokens"] = llm_config.max_tokens
+                        if llm_config.base_url and llm_config.base_url != "default": llm_params["base_url"] = llm_config.base_url
+                        if credential.provider: llm_params["provider"] = credential.provider
+                        agent_llm = LLM(**llm_params)
+
+            agent_kwargs = {
+                "role": node.data.role,
+                "goal": node.data.goal,
+                "backstory": node.data.backstory,
+                "llm": agent_llm,
+                "tools": this_tools,
+                "verbose": getattr(node.data, 'verbose', True) is not False,
+                "allow_delegation": getattr(node.data, 'allow_delegation', False) is True,
+                "cache": getattr(node.data, 'cache', True) is not False,
+                "allow_code_execution": getattr(node.data, 'allow_code_execution', False) is True,
+                "respect_context_window": getattr(node.data, 'respect_context_window', True) is not False,
+                "use_system_prompt": getattr(node.data, 'use_system_prompt', True) is not False,
+                "reasoning": getattr(node.data, 'reasoning', False) is True,
+                "multimodal": getattr(node.data, 'multimodal', False) is True,
+            }
+            max_iter = getattr(node.data, 'max_iter', 25)
+            if max_iter is not None: agent_kwargs["max_iter"] = max_iter
+            max_retry = getattr(node.data, 'max_retry_limit', 2)
+            if max_retry is not None: agent_kwargs["max_retry_limit"] = max_retry
+            max_rpm = getattr(node.data, 'max_rpm', None)
+            if max_rpm is not None: agent_kwargs["max_rpm"] = max_rpm
+
+            agents_map[node.id] = Agent(**agent_kwargs)
+
+        # --- Build Tasks ---
+        tasks_list: List[Task] = []
+        tasks_dict: Dict[str, Task] = {}
+        agent_ids = {n.id for n in agent_nodes}
+
+        for node in task_nodes:
+            task_agent_edge = next((e for e in edges if e.target == node.id and e.source in agent_ids), None)
+            if not task_agent_edge or task_agent_edge.source not in agents_map:
+                continue
+            target_agent = agents_map[task_agent_edge.source]
+            task_tools = resolve_tools(node.data)
+            combined = {getattr(t, 'name', str(t)): t for t in (target_agent.tools or [])}
+            combined.update({getattr(t, 'name', str(t)): t for t in task_tools})
+            task = Task(
+                description=node.data.description,
+                expected_output=node.data.expected_output,
+                agent=target_agent,
+                tools=list(combined.values()),
+            )
+            tasks_list.append(task)
+            tasks_dict[node.id] = task
+
+        if not tasks_dict:
+            raise ValueError("A Crew não possui nenhuma Task válida para executar.")
+
+        # --- Order tasks ---
+        final_tasks: List[Task] = []
+        visited = set()
+
+        def add_task(tid):
+            if tid in visited or tid not in tasks_dict:
+                return
+            visited.add(tid)
+            node = nodes.get(tid)
+            if node:
+                context_ids = getattr(node.data, 'context', []) or []
+                for c_id in context_ids:
+                    add_task(c_id)
+                task_instance = tasks_dict[tid]
+                context_tasks = [tasks_dict[c] for c in context_ids if c in tasks_dict]
+                if context_tasks:
+                    task_instance.context = context_tasks
+            final_tasks.append(tasks_dict[tid])
+
+        agent_order = getattr(crew_node.data, 'agentOrder', []) or [n.id for n in agent_nodes]
+        base_queue = []
+        agent_to_tasks = {ag_id: [] for ag_id in agent_order}
+        for edge in edges:
+            if edge.source in set(agent_order) and edge.target in tasks_dict:
+                agent_to_tasks[edge.source].append(edge.target)
+        for ag_id in agent_order:
+            for tid in agent_to_tasks[ag_id]:
+                if tid not in base_queue:
+                    base_queue.append(tid)
+        for t_node in task_nodes:
+            if t_node.id not in base_queue and t_node.id in tasks_dict:
+                base_queue.append(t_node.id)
+        for tid in base_queue:
+            add_task(tid)
+
+        # --- Build Crew kwargs ---
+        crew_kwargs = {
+            "agents": list(agents_map.values()),
+            "tasks": final_tasks,
+            "process": process_type,
+        }
+
+        if crew_node:
+            data = crew_node.data
+            crew_kwargs["verbose"] = getattr(data, 'verbose', True) is not False
+            if getattr(data, 'memory', False):
+                crew_kwargs["memory"] = True
+            if getattr(data, 'cache', True) is False:
+                crew_kwargs["cache"] = False
+            if getattr(data, 'planning', False):
+                crew_kwargs["planning"] = True
+            max_rpm = getattr(data, 'max_rpm', None)
+            if max_rpm is not None:
+                crew_kwargs["max_rpm"] = max_rpm
+
+            with Session(engine) as session:
+                manager_id = getattr(data, 'manager_llm_id', None)
+                if manager_id:
+                    manager_config = session.get(LLMModel, manager_id)
+                    if manager_config:
+                        credential = session.get(Credential, manager_config.credential_id)
+                        if credential:
+                            llm_params = {"model": manager_config.model_name, "api_key": credential.key}
+                            if manager_config.base_url and manager_config.base_url != "default": llm_params["base_url"] = manager_config.base_url
+                            if manager_config.temperature is not None: llm_params["temperature"] = manager_config.temperature
+                            if credential.provider: llm_params["provider"] = credential.provider
+                            crew_kwargs["manager_llm"] = LLM(**llm_params)
+
+            embedder_conf = getattr(data, 'embedder', None)
+            if embedder_conf:
+                try:
+                    crew_kwargs["embedder"] = json.loads(embedder_conf)
+                except Exception:
+                    pass
+
+        crew = Crew(**crew_kwargs)
+        result = crew.kickoff(inputs=execution_inputs)
+        return str(result)
