@@ -129,6 +129,7 @@ export function NodeConfigDrawer() {
         setIsContextSelectorOpen(false);
         setIsMcpSelectorOpen(false);
         setIsCustomToolSelectorOpen(false);
+        setNewSecretReveal(null);
       }
     }
   }, [activeNodeId, nodes]);
@@ -2253,15 +2254,17 @@ export function NodeConfigDrawer() {
                 Map Crew input variables to dot-notation paths in the incoming JSON payload (e.g. <code className="text-orange-400">data.topic</code>).
               </p>
               <div className="flex flex-col gap-2">
-                {Object.entries((data as any).fieldMappings || {}).map(([crewVar, path], idx) => (
-                  <div key={idx} className="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-1.5">
+                {Object.entries((data as any).fieldMappings || {}).map(([crewVar, path]) => (
+                  <div key={crewVar} className="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-1.5">
                     <input
                       value={crewVar}
                       onChange={(e) => {
+                        const newKey = e.target.value;
                         const current: Record<string, string> = { ...(data as any).fieldMappings };
+                        if (newKey !== crewVar && newKey in current) return; // prevent silent duplicate overwrite
                         const val = current[crewVar] as string;
                         delete current[crewVar];
-                        current[e.target.value] = val;
+                        current[newKey] = val;
                         updateNodeData(activeNode.id, { fieldMappings: current });
                       }}
                       onBlur={() => {

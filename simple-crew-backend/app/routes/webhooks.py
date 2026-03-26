@@ -2,6 +2,7 @@ import copy
 import hmac
 import json as _json
 import os
+import traceback
 import uuid
 from datetime import datetime, timezone
 from typing import Any, List, Optional
@@ -10,7 +11,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, R
 from sqlmodel import Session, select
 
 from ..crew_builder import run_crew_sync
-from ..database import get_session
+from ..database import engine, get_session
 from ..models import CrewProject, ExecutionStatus, WebhookConfig, WebhookExecution
 from ..schemas import (
     GraphData,
@@ -148,9 +149,6 @@ def _map_payload_to_inputs(payload: dict, field_mappings: dict) -> dict:
 
 
 def _run_background_task(execution_id: str, graph_data: GraphData, workspace_id: Optional[str]):
-    from ..database import engine
-    from sqlmodel import Session
-
     with Session(engine) as session:
         execution = session.get(WebhookExecution, uuid.UUID(execution_id))
         if not execution:
@@ -166,7 +164,6 @@ def _run_background_task(execution_id: str, graph_data: GraphData, workspace_id:
             execution.result = str(result)
             execution.status = ExecutionStatus.SUCCESS
         except Exception as e:
-            import traceback
             execution.error = f"{str(e)}\n{traceback.format_exc()}"
             execution.status = ExecutionStatus.ERROR
         finally:
@@ -256,7 +253,6 @@ async def trigger_webhook(
             execution.result = str(result)
             execution.status = ExecutionStatus.SUCCESS
         except Exception as e:
-            import traceback
             execution.error = f"{str(e)}\n{traceback.format_exc()}"
             execution.status = ExecutionStatus.ERROR
         finally:

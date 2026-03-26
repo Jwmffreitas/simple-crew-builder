@@ -1101,7 +1101,9 @@ export const useStore = create<AppState>((set, get) => ({
         // Provision webhook config if project is saved
         const projectId = get().currentProjectId;
         if (projectId) {
-          get().provisionWebhook(projectId);
+          get().provisionWebhook(projectId).then((config) => {
+            if (!config) toast.error('Failed to provision webhook. Save the project and try again.');
+          });
         }
       }
 
