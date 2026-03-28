@@ -29,14 +29,28 @@ import {
   Layout,
   Type
 } from 'lucide-react';
-import { useStore } from '../store';
+import { useStore } from '../store/index';
 import { HighlightedTextField } from '../components/HighlightedTextField';
 import { CustomSelect } from '../components/CustomSelect';
-import { type ModelConfig, type MCPServer, type CustomTool } from '../types';
+import { type ModelConfig, type MCPServer, type CustomTool } from '../types/config.types';
 import { ConfirmationModal } from '../components/ConfirmationModal';
 import { KnowledgeBaseSettings } from '../components/KnowledgeBaseSettings';
 import { Database } from 'lucide-react';
 
+
+const INITIAL_CREDENTIAL = { name: '', description: '', key: '', provider: '' };
+const INITIAL_MODEL = { 
+  name: '', 
+  model_name: '',
+  description: '', 
+  credentialId: '', 
+  baseUrl: '', 
+  temperature: undefined, 
+  maxTokens: undefined, 
+  maxCompletionTokens: undefined, 
+  isDefault: false,
+  model_type: 'GENERATIVE' as const
+};
 
 const SettingsPage = () => {
   const navigate = useNavigate();
@@ -63,19 +77,8 @@ const SettingsPage = () => {
   const [isMCPModalOpen, setIsMCPModalOpen] = useState(false);
   const [isCustomToolModalOpen, setIsCustomToolModalOpen] = useState(false);
   const [isWorkspaceModalOpen, setIsWorkspaceModalOpen] = useState(false);
-  const [newCred, setNewCred] = useState({ name: '', description: '', key: '', provider: '' });
-  const [newModel, setNewModel] = useState<Omit<ModelConfig, 'id'>>({ 
-    name: '', 
-    model_name: '',
-    description: '', 
-    credentialId: '', 
-    baseUrl: '', 
-    temperature: undefined, 
-    maxTokens: undefined, 
-    maxCompletionTokens: undefined, 
-    isDefault: false,
-    model_type: 'GENERATIVE'
-  });
+  const [newCred, setNewCred] = useState(INITIAL_CREDENTIAL);
+  const [newModel, setNewModel] = useState<Omit<ModelConfig, 'id'>>(INITIAL_MODEL);
   const [newMCP, setNewMCP] = useState<Omit<MCPServer, 'id'>>({
     name: '',
     transportType: 'stdio',
@@ -132,7 +135,7 @@ const SettingsPage = () => {
   const handleAddCredential = () => {
     if (newCred.name && newCred.key) {
       addCredential(newCred);
-      setNewCred({ name: '', description: '', key: '', provider: '' });
+      setNewCred(INITIAL_CREDENTIAL);
       setIsModalOpen(false);
     }
   };
@@ -161,18 +164,7 @@ const SettingsPage = () => {
       } else {
         addModel(modelToSave);
       }
-      setNewModel({ 
-        name: '', 
-        model_name: '',
-        description: '', 
-        credentialId: '', 
-        baseUrl: '', 
-        temperature: undefined, 
-        maxTokens: undefined, 
-        maxCompletionTokens: undefined, 
-        isDefault: false,
-        model_type: 'GENERATIVE'
-      });
+      setNewModel(INITIAL_MODEL);
       setEditingModelId(null);
       setIsModelModalOpen(false);
     }
@@ -425,7 +417,10 @@ const SettingsPage = () => {
                   <p className="text-brand-muted text-sm">Manage your API keys for different LLM providers.</p>
                 </div>
                 <button 
-                  onClick={() => setIsModalOpen(true)}
+                  onClick={() => {
+                    setNewCred(INITIAL_CREDENTIAL);
+                    setIsModalOpen(true);
+                  }}
                   className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg shadow-indigo-600/20 transition-all active:scale-95"
                 >
                   <Plus className="w-5 h-5" />
@@ -491,7 +486,11 @@ const SettingsPage = () => {
                   <p className="text-brand-muted text-sm">Configure your specific AI models and parameters.</p>
                 </div>
                 <button 
-                  onClick={() => setIsModelModalOpen(true)}
+                  onClick={() => {
+                    setEditingModelId(null);
+                    setNewModel(INITIAL_MODEL);
+                    setIsModelModalOpen(true);
+                  }}
                   className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg shadow-indigo-600/20 transition-all active:scale-95"
                 >
                   <Plus className="w-5 h-5" />
@@ -975,11 +974,11 @@ const SettingsPage = () => {
       {/* Modal - New Credential */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setIsModalOpen(false)} />
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => { setIsModalOpen(false); setNewCred(INITIAL_CREDENTIAL); }} />
           <div className="relative w-full max-w-md bg-brand-card border border-brand-border rounded-3xl shadow-2xl p-8 animate-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-brand-text">Add New Credential</h2>
-              <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-brand-bg rounded-full text-brand-muted transition-colors">
+              <button onClick={() => { setIsModalOpen(false); setNewCred(INITIAL_CREDENTIAL); }} className="p-2 hover:bg-brand-bg rounded-full text-brand-muted transition-colors">
                 <X className="w-6 h-6" />
               </button>
             </div>
@@ -1046,7 +1045,7 @@ const SettingsPage = () => {
 
               <div className="pt-4 flex gap-3">
                 <button 
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={() => { setIsModalOpen(false); setNewCred(INITIAL_CREDENTIAL); }}
                   className="flex-1 py-3 bg-brand-bg border border-brand-border text-brand-text rounded-xl font-bold hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-red-500 transition-colors"
                 >
                   Cancel
@@ -1067,14 +1066,14 @@ const SettingsPage = () => {
       {/* Modal - New Model */}
       {isModelModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => { setIsModelModalOpen(false); setEditingModelId(null); }} />
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => { setIsModelModalOpen(false); setEditingModelId(null); setNewModel(INITIAL_MODEL); }} />
           <div className="relative w-full max-w-xl bg-brand-card border border-brand-border rounded-3xl shadow-2xl p-8 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-8">
               <div>
                 <h2 className="text-2xl font-bold text-brand-text">{editingModelId ? 'Edit AI Model' : 'Configure AI Model'}</h2>
                 <p className="text-xs text-brand-muted mt-1">Set up specific parameters for your LLM.</p>
               </div>
-              <button onClick={() => { setIsModelModalOpen(false); setEditingModelId(null); }} className="p-2 hover:bg-brand-bg rounded-full text-brand-muted transition-colors">
+              <button onClick={() => { setIsModelModalOpen(false); setEditingModelId(null); setNewModel(INITIAL_MODEL); }} className="p-2 hover:bg-brand-bg rounded-full text-brand-muted transition-colors">
                 <X className="w-6 h-6" />
               </button>
             </div>
@@ -1225,7 +1224,7 @@ const SettingsPage = () => {
 
               <div className="md:col-span-2 pt-6 flex gap-4 border-t border-brand-border mt-4">
                 <button 
-                  onClick={() => { setIsModelModalOpen(false); setEditingModelId(null); }}
+                  onClick={() => { setIsModelModalOpen(false); setEditingModelId(null); setNewModel(INITIAL_MODEL); }}
                   className="flex-1 py-3 bg-brand-bg border border-brand-border text-brand-text rounded-xl font-bold hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-red-500 transition-colors"
                 >
                   Cancel

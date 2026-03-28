@@ -30,6 +30,7 @@ from .ai_service import generate_suggestion, generate_bulk_suggestion, generate_
 from .core.database.neo4j_db import neo4j_manager, get_neo4j_session
 from neo4j import Session as Neo4jSession
 from .routes import knowledge_base
+from .utils import normalize_command
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -280,6 +281,8 @@ async def export_project_python(project_id: str, session: Session = Depends(get_
                         "model": llm_config.model_name,
                         "provider": provider
                     }
+                else:
+                    print(f"--- WARNING: No LLM config found for agent {node.id}. Using default or skipped. ---")
                 
                 # Function Calling LLM
                 fc_id = getattr(node.data, 'function_calling_llm_id', None)
@@ -376,6 +379,8 @@ async def export_project_python(project_id: str, session: Session = Depends(get_
             headers={"Content-Disposition": f"attachment; filename={filename}"}
         )
     except Exception as e:
+        import traceback
+        traceback.print_exc() # Print full stack trace to console
         raise HTTPException(status_code=500, detail=f"Erro ao gerar exportação: {str(e)}")
 
 # --- CRUD de Credenciais ---
@@ -497,8 +502,13 @@ async def set_default_model(model_id: str, session: Session = Depends(get_sessio
 # --- CRUD de Gerenciamento de MCP Servers ---
 @app.post("/api/v1/mcp-servers", response_model=MCPServerRead)
 async def create_mcp_server(mcp: MCPServerCreate, session: Session = Depends(get_session)):
+    # Sanitiza o comando antes de salvar (Garante portabilidade)
+    mcp_data = mcp.model_dump()
+    if mcp_data.get("command"):
+        mcp_data["command"] = normalize_command(mcp_data["command"])
+
     new_mcp = MCPServer(
-        **mcp.model_dump(),
+        **mcp_data,
         user_id=ROOT_USER_ID
     )
     session.add(new_mcp)
@@ -527,6 +537,9 @@ async def update_mcp_server(mcp_id: str, mcp_update: MCPServerUpdate, session: S
         raise HTTPException(status_code=404, detail="Servidor MCP não encontrado")
     
     update_data = mcp_update.model_dump(exclude_unset=True)
+    if update_data.get("command"):
+        update_data["command"] = normalize_command(update_data["command"])
+
     for key, value in update_data.items():
         setattr(db_mcp, key, value)
     
