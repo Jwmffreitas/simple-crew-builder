@@ -6,7 +6,7 @@ import { useShallow } from 'zustand/shallow';
 import { Play, Sparkles, Save, Loader2, ArrowLeft } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 
-import { useStore } from '../store';
+import { useStore } from '../store/index';
 import logo from '../assets/logo.PNG';
 
 import { AgentNode } from '../nodes/AgentNode';
@@ -110,7 +110,7 @@ function FlowBuilder() {
 
   const { 
     isExecuting, startRealExecution, executionResult, setIsConsoleExpanded, setIsConsoleOpen,
-    isChatVisible, setIsChatVisible,
+    isChatVisible, setIsChatVisible, resetUIState,
     loadProject, saveProject, currentProjectId, isSaving, resetProject, validateGraph, 
     showNotification, updateProjectMetadata, currentProjectName, currentProjectDescription
   } = useStore(
@@ -122,6 +122,7 @@ function FlowBuilder() {
       setIsConsoleOpen: state.setIsConsoleOpen,
       isChatVisible: state.isChatVisible,
       setIsChatVisible: state.setIsChatVisible,
+      resetUIState: state.resetUIState,
       loadProject: state.loadProject,
       saveProject: state.saveProject,
       currentProjectId: state.currentProjectId,
@@ -148,6 +149,12 @@ function FlowBuilder() {
       resetProject();
     }
   }, [id, loadProject, resetProject]);
+
+  useEffect(() => {
+    return () => {
+      resetUIState();
+    };
+  }, [resetUIState]);
 
   const [activeView, setActiveView] = React.useState<'editor' | 'animation'>('editor');
   const [isEditingTitle, setIsEditingTitle] = React.useState(false);

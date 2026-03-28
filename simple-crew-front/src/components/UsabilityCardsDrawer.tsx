@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { X, LayoutTemplate, Search, MessageCircle, Plus } from 'lucide-react';
 import { useReactFlow } from '@xyflow/react';
-import { useStore } from '../store';
+import { useStore } from '../store/index';
 
 export function UsabilityCardsDrawer() {
   const isUsabilityDrawerOpen = useStore((state) => state.isUsabilityDrawerOpen);
