@@ -13,6 +13,7 @@ import { AgentNode } from '../nodes/AgentNode';
 import { TaskNode } from '../nodes/TaskNode';
 import { CrewNode } from '../nodes/CrewNode';
 import { ChatNode } from '../nodes/ChatNode';
+import { WebhookNode } from '../nodes/WebhookNode';
 import { Sidebar } from '../components/Sidebar';
 
 import { NodeConfigDrawer } from '../components/NodeConfigDrawer';
@@ -30,6 +31,7 @@ const nodeTypes = {
   task: TaskNode,
   crew: CrewNode,
   chat: ChatNode,
+  webhook: WebhookNode,
 };
 
 const edgeTypes = {
@@ -72,6 +74,16 @@ const FlowCanvas = () => {
       else if (type === 'crew') data = { process: 'sequential', isCollapsed: false };
       else if (type === 'chat') {
         data = { name: 'Chat Trigger', description: 'Start the Crew from a user\'s text message.', isCollapsed: false, inputMapping: 'chat_input' };
+      } else if (type === 'webhook') {
+        data = { 
+          name: `Webhook ${timestamp}`, 
+          method: 'POST', 
+          isActive: true, 
+          waitForResult: false, 
+          headers: {}, 
+          fieldMappings: {}, 
+          isCollapsed: false 
+        };
       }
 
       addNode({ id: getId(), type, position, data } as any);
@@ -96,6 +108,7 @@ const FlowCanvas = () => {
           if (node.type === 'agent') return '#3b82f6';
           if (node.type === 'task') return '#10b981';
           if (node.type === 'crew') return '#8b5cf6';
+          if (node.type === 'webhook') return '#f97316';
           return '#e2e8f0';
         }} />
     </ReactFlow>

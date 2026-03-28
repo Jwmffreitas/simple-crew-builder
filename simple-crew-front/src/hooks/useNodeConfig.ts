@@ -59,6 +59,7 @@ export const useNodeConfig = () => {
   const isAgent = activeNode?.type === 'agent';
   const isTask = activeNode?.type === 'task';
   const isChat = activeNode?.type === 'chat';
+  const isWebhook = activeNode?.type === 'webhook';
 
   useEffect(() => {
     if (activeNodeId) {
@@ -369,6 +370,7 @@ export const useNodeConfig = () => {
     isAgent,
     isTask,
     isChat,
+    isWebhook,
     renderableAgents,
     renderableTasks,
     handleAgentDragEnd,

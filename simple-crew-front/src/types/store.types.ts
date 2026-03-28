@@ -88,7 +88,7 @@ export interface GraphSlice {
   deleteNode: (nodeId: string) => void;
   updateNodeData: (nodeId: string, data: Partial<any>) => void;
   addNode: (node: AppNode) => void;
-  addNodeWithAutoPosition: (type: 'agent' | 'task' | 'crew' | 'chat', data: any) => void;
+  addNodeWithAutoPosition: (type: 'agent' | 'task' | 'crew' | 'chat' | 'webhook', data: any) => void;
   setNodeStatus: (id: string, status: NodeStatus) => void;
   setNodeWarnings: (warnings: Record<string, string[]>) => void;
   setActiveNode: (id: string | null) => void;

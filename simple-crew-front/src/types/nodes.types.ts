@@ -83,10 +83,25 @@ export interface ChatNodeData extends Record<string, unknown> {
   systemMessage?: string;
 }
 
+export interface WebhookNodeData extends Record<string, unknown> {
+  name: string;
+  webhookId?: string;
+  path: string;
+  url: string;
+  method?: 'POST' | 'GET';
+  fieldMappings?: Record<string, string>;
+  enableHmac?: boolean;
+  secret?: string;
+  isActive?: boolean;
+  waitForResult?: boolean;
+  isCollapsed?: boolean;
+}
+
 export type AppNode =
   | Node<AgentNodeData, 'agent'>
   | Node<TaskNodeData, 'task'>
   | Node<CrewNodeData, 'crew'>
-  | Node<ChatNodeData, 'chat'>;
+  | Node<ChatNodeData, 'chat'>
+  | Node<WebhookNodeData, 'webhook'>;
 
 export type AppEdge = Edge;
