@@ -1,8 +1,9 @@
 import React, { memo, useState } from 'react';
-import { Globe, Lock, Settings, Copy, RefreshCw, Plus, X, ToggleLeft, ToggleRight, Sparkles } from 'lucide-react';
+import { Globe, Lock, Settings, Copy, RefreshCw, Plus, X, ToggleLeft, ToggleRight, Sparkles, Zap } from 'lucide-react';
 import { HighlightedTextField } from '../HighlightedTextField';
 import type { WebhookNodeData } from '../../types/nodes.types';
 import toast from 'react-hot-toast';
+import { WebhookMapperModal } from './WebhookMapperModal';
 
 interface WebhookFormProps {
   data: WebhookNodeData;
@@ -10,6 +11,7 @@ interface WebhookFormProps {
   updateNodeData: (id: string, data: Partial<WebhookNodeData>) => void;
   onFieldKeyDown: (e: React.KeyboardEvent) => void;
   onFieldChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>, field: string, updateFn: (val: string) => void) => void;
+  allProjectVariables: string[];
 }
 
 export const WebhookForm: React.FC<WebhookFormProps> = memo(({
@@ -17,9 +19,11 @@ export const WebhookForm: React.FC<WebhookFormProps> = memo(({
   nodeId,
   updateNodeData,
   onFieldKeyDown,
-  onFieldChange
+  onFieldChange,
+  allProjectVariables
 }) => {
   const [activeTab, setActiveTab] = useState<'basic' | 'security' | 'mappings'>('basic');
+  const [isMapperOpen, setIsMapperOpen] = useState(false);
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -331,9 +335,18 @@ export const WebhookForm: React.FC<WebhookFormProps> = memo(({
                     <label className="text-[10px] font-bold text-brand-muted uppercase tracking-wider">Payload Mapping</label>
                     <span className="text-[9px] text-brand-muted">Map JSON payload keys to Crew inputs</span>
                  </div>
-                 <button onClick={addMapping} className="p-1 hover:bg-brand-bg rounded-full text-orange-500">
-                    <Plus className="w-3.5 h-3.5" />
-                 </button>
+                 <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => setIsMapperOpen(true)}
+                      className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-orange-500/10 text-orange-500 hover:bg-orange-500/20 text-[9px] font-bold uppercase transition-all"
+                    >
+                      <Zap className="w-3 h-3" />
+                      Visual Mapper
+                    </button>
+                    <button onClick={addMapping} className="p-1 hover:bg-brand-bg rounded-full text-orange-500">
+                       <Plus className="w-3.5 h-3.5" />
+                    </button>
+                 </div>
               </div>
 
               <div className="flex flex-col gap-2">
@@ -366,6 +379,15 @@ export const WebhookForm: React.FC<WebhookFormProps> = memo(({
            </div>
         </div>
       )}
+
+      <WebhookMapperModal
+        isOpen={isMapperOpen}
+        onClose={() => setIsMapperOpen(false)}
+        data={data}
+        nodeId={nodeId}
+        updateNodeData={updateNodeData}
+        allProjectVariables={allProjectVariables}
+      />
     </div>
   );
 });

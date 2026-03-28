@@ -215,7 +215,7 @@ def wrap_tool_with_workspace_guard(tool_instance: BaseTool, workspace_path: str)
     tool_instance._run = protected_run
     return tool_instance
 
-def run_crew_stream(graph_data: GraphData, workspace_id: Optional[Any] = None) -> Iterator[str]:
+def run_crew_stream(graph_data: GraphData, workspace_id: Optional[Any] = None, inputs: Optional[Dict[str, Any]] = None) -> Iterator[str]:
     nodes = {node.id: node for node in graph_data.nodes}
     edges = graph_data.edges
     
@@ -230,6 +230,10 @@ def run_crew_stream(graph_data: GraphData, workspace_id: Optional[Any] = None) -
     execution_inputs = getattr(crew_node.data, 'inputs', {}) or {}
     # Filtra apenas keys reais (remove os placeholders temporários do frontend)
     execution_inputs = {k: v for k, v in execution_inputs.items() if not k.startswith('input_')}
+    
+    # Mescla com inputs externos (ex: vindo de Webhook)
+    if inputs:
+        execution_inputs.update(inputs)
 
     process_type = Process.sequential
     if crew_node.data.process == "hierarchical":

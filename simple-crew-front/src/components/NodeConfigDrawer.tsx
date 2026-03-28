@@ -67,6 +67,7 @@ export function NodeConfigDrawer() {
     handleFieldChange,
     connectedCrewInputs,
     isChatConnected,
+    allProjectVariables,
     nodeWarnings
   } = useNodeConfig();
 
@@ -284,6 +285,7 @@ export function NodeConfigDrawer() {
             updateNodeData={updateNodeData}
             onFieldKeyDown={handleFieldKeyDown}
             onFieldChange={handleFieldChange}
+            allProjectVariables={allProjectVariables}
           />
         )}
       </div>

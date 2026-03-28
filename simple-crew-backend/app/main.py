@@ -1,3 +1,4 @@
+import json
 import io
 import os
 import shutil
@@ -783,6 +784,175 @@ async def get_file_content(ws_id: str, path: str, session: Session = Depends(get
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+import hmac
+import hashlib
+
+def verify_hmac(body: bytes, secret: str, signature: str) -> bool:
+    """Verifica a assinatura HMAC-SHA256 do payload."""
+    if not signature:
+        return False
+    # Remove prefixo 'sha256=' se houver (comum em GitHub/outros)
+    if signature.startswith('sha256='):
+        signature = signature[7:]
+    
+    expected = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, signature)
+
+import re
+
+def resolve_path(data: Any, path: str) -> Optional[Any]:
+    """Resolve a path like 'user.friends[0].name' in data."""
+    # Split by dot or brackets for robust resolution
+    parts = re.split(r'\.|\[|\]', path)
+    parts = [p for p in parts if p] # Remove empty parts
+    
+    val = data
+    for p in parts:
+        if isinstance(val, dict):
+            val = val.get(p)
+        elif isinstance(val, list):
+            try:
+                # Handle numeric index for lists
+                val = val[int(p)]
+            except (ValueError, IndexError, TypeError):
+                return None
+        else:
+            return None
+    return val
+
+def map_payload_to_inputs(payload: Dict[str, Any], mappings: Dict[str, str]) -> Dict[str, Any]:
+    """Mapeia campos do payload para inputs do Crew suportando n8n format e arrays."""
+    inputs = {}
+    if not mappings:
+        return inputs
+        
+    for target_key, source_path in mappings.items():
+        # Suporte ao formato n8n: {{ $json.path.to.key }}
+        path = source_path.strip()
+        if path.startswith('{{') and path.endswith('}}'):
+            path = path[2:-2].strip()
+        if path.startswith('$json.'):
+            path = path[6:]
+            
+        val = resolve_path(payload, path)
+        if val is not None:
+            inputs[target_key] = val
+            
+    return inputs
+
+@app.api_route("/webhook/{slug}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+async def handle_webhook(
+    slug: str, 
+    request: Request, 
+    background_tasks: BackgroundTasks,
+    x_hub_signature: Optional[str] = Header(None, alias="X-Hub-Signature-256"),
+    session: Session = Depends(get_session)
+):
+    """
+    Endpoint dinâmico para triggers de Webhook.
+    Busca o projeto que contém um nó webhook com o path (slug) correspondente.
+    """
+    # 1. Busca todos os projetos para encontrar o que tem o webhook configurado
+    # Em produção com muitos projetos, isso deve ser um índice ou query JSON otimizada.
+    statement = select(CrewProject)
+    projects = session.exec(statement).all()
+    
+    target_project = None
+    target_node = None
+    
+    for p in projects:
+        nodes = p.canvas_data.get("nodes", [])
+        for n in nodes:
+            if n.get("type") == "webhook":
+                node_data = n.get("data", {})
+                if node_data.get("path") == slug:
+                    target_project = p
+                    target_node = n
+                    break
+        if target_project:
+            break
+            
+    if not target_project or not target_node:
+        raise HTTPException(status_code=404, detail=f"Webhook path '/{slug}' não encontrado em nenhum projeto ativo.")
+    
+    data = target_node.get("data", {})
+    
+    # 2. Verificações de Segurança e Estado
+    if data.get("isActive") is False:
+        raise HTTPException(status_code=403, detail="Este webhook está desativado.")
+        
+    # Validar método se especificado
+    if data.get("method") and data.get("method") != request.method:
+        raise HTTPException(status_code=405, detail=f"Método {request.method} não permitido. Use {data.get('method')}")
+
+    # HMAC Verification
+    secret = data.get("secret")
+    body = await request.body()
+    if secret:
+        if not verify_hmac(body, secret, x_hub_signature):
+            raise HTTPException(status_code=401, detail="Assinatura HMAC inválida.")
+
+    # 3. Preparação de Inputs
+    payload = {}
+    if body:
+        try:
+            payload = await request.json()
+        except:
+            # Tenta form data se falhar JSON
+            try:
+                form_data = await request.form()
+                payload = dict(form_data)
+            except:
+                pass
+                
+    mappings = data.get("fieldMappings", {})
+    mapped_inputs = map_payload_to_inputs(payload, mappings)
+    
+    # Se não houver mappings, injeta o payload inteiro em 'webhook_payload' como fallback
+    if not mapped_inputs:
+        mapped_inputs = {"webhook_payload": payload}
+
+    # 4. Execução
+    graph_data = GraphData(**target_project.canvas_data)
+    workspace_id = target_project.workspace_id
+    
+    if data.get("waitForResult") is True:
+        # Síncrono: Consome o stream e retorna o resultado final
+        final_result = ""
+        try:
+            stream = run_crew_stream(graph_data, workspace_id=workspace_id, inputs=mapped_inputs)
+            for event_str in stream:
+                if not event_str.strip():
+                    continue
+                event = json.loads(event_str)
+                if event.get("type") == "final_result":
+                    final_result = event.get("result", "")
+                elif event.get("type") == "error":
+                    raise Exception(event.get("error"))
+            
+            return {
+                "status": "success",
+                "webhook": slug,
+                "project": target_project.name,
+                "output": final_result
+            }
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Erro na execução síncrona: {str(e)}")
+    else:
+        # Assíncrono: Dispara em background
+        def run_in_background():
+            # Precisamos consumir o generator para ele rodar
+            for _ in run_crew_stream(graph_data, workspace_id=workspace_id, inputs=mapped_inputs):
+                pass
+        
+        background_tasks.add_task(run_in_background)
+        return {
+            "status": "accepted",
+            "message": "Execução iniciada em background.",
+            "webhook": slug,
+            "project": target_project.name
+        }
 
 @app.get("/api/v1/workspaces/{ws_id}/download-zip")
 async def download_workspace_zip(

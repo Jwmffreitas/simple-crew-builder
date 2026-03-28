@@ -15,6 +15,7 @@ vi.mock('lucide-react', () => ({
   ToggleLeft: () => <div data-testid="icon-toggle-left" />,
   ToggleRight: () => <div data-testid="icon-toggle-right" />,
   Sparkles: () => <div data-testid="icon-sparkles" />,
+  Zap: () => <div data-testid="icon-zap" />,
 }));
 
 // Mock HighlightedTextField
@@ -76,6 +77,7 @@ describe('WebhookForm', () => {
       updateNodeData: vi.fn(),
       onFieldKeyDown: vi.fn(),
       onFieldChange: vi.fn((e, _field, updateFn) => updateFn(e.target.value)),
+      allProjectVariables: ['topic', 'language']
     };
   });
 

@@ -67,6 +67,14 @@ class NodeData(BaseModel):
     output_log_file: Optional[str] = None
     prompt_file: Optional[str] = None
 
+    # Webhook specific
+    path: Optional[str] = None
+    method: Optional[str] = None
+    isActive: Optional[bool] = None
+    waitForResult: Optional[bool] = None
+    secret: Optional[str] = None
+    fieldMappings: Optional[Dict[str, str]] = None
+
     # Permitir chaves adicionais como isCollapsed de forma crua, caso necessite depois
     class Config:
         extra = "allow"
