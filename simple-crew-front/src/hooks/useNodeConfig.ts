@@ -59,6 +59,7 @@ export const useNodeConfig = () => {
   const isAgent = activeNode?.type === 'agent';
   const isTask = activeNode?.type === 'task';
   const isChat = activeNode?.type === 'chat';
+  const isWebhook = activeNode?.type === 'webhook';
 
   useEffect(() => {
     if (activeNodeId) {
@@ -319,15 +320,50 @@ export const useNodeConfig = () => {
     }
   }, []);
 
+  const allProjectVariables = useMemo(() => {
+    const vars = new Set<string>();
+    
+    // 1. Inputs from Crew Node
+    const crewNode = nodes.find(n => n.type === 'crew');
+    if (crewNode) {
+      const inputs = (crewNode.data as any)?.inputs || {};
+      Object.keys(inputs).forEach(k => {
+        if (!k.startsWith('input_')) vars.add(k);
+      });
+    }
+
+    // 2. Scan all nodes for {variable} patterns
+    const variableRegex = /\{([a-zA-Z0-9_-]+)\}/g;
+    nodes.forEach(node => {
+      const data = node.data as any;
+      const fieldsToScan = [
+        data.role, data.goal, data.backstory,
+        data.description, data.expected_output,
+        data.system_template, data.prompt_template, data.response_template
+      ];
+      
+      fieldsToScan.forEach(field => {
+        if (typeof field === 'string') {
+          let match;
+          while ((match = variableRegex.exec(field)) !== null) {
+            vars.add(match[1]);
+          }
+        }
+      });
+    });
+
+    return Array.from(vars).sort();
+  }, [nodes]);
+
   let connectedCrewInputs: string[] = [];
   let isChatConnected = false;
-  if (isChat && activeNodeId) {
-    const edgeToCrew = edges.find(e => e.source === activeNodeId);
-    if (edgeToCrew) {
-      isChatConnected = true;
-      const crewNode = nodes.find(n => n.id === edgeToCrew.target);
-      if (crewNode && crewNode.type === 'crew') {
-        connectedCrewInputs = Object.keys((crewNode.data as any)?.inputs || {}).filter(k => !k.startsWith('input_'));
+  if ((isChat || isWebhook) && activeNodeId) {
+    const edgeToSource = edges.find(e => e.source === activeNodeId);
+    if (edgeToSource) {
+      const targetNode = nodes.find(n => n.id === edgeToSource.target);
+      if (targetNode && targetNode.type === 'crew') {
+        isChatConnected = true;
+        connectedCrewInputs = Object.keys((targetNode.data as any)?.inputs || {}).filter(k => !k.startsWith('input_'));
       }
     }
   }
@@ -369,6 +405,7 @@ export const useNodeConfig = () => {
     isAgent,
     isTask,
     isChat,
+    isWebhook,
     renderableAgents,
     renderableTasks,
     handleAgentDragEnd,
@@ -381,6 +418,7 @@ export const useNodeConfig = () => {
     handleFieldChange,
     connectedCrewInputs,
     isChatConnected,
+    allProjectVariables,
     nodeWarnings: activeNodeId ? (nodeWarningsStore[activeNodeId] || []) : []
   };
 };

@@ -185,8 +185,9 @@ export const createGraphSlice: StateCreator<AppState, [], [], GraphSlice> = (set
       const isCrewToAgent = sourceNode.type === 'crew' && targetNode.type === 'agent';
       const isAgentToTask = sourceNode.type === 'agent' && targetNode.type === 'task';
       const isChatToCrew = sourceNode.type === 'chat' && targetNode.type === 'crew';
+      const isWebhookToCrew = sourceNode.type === 'webhook' && targetNode.type === 'crew';
 
-      if (!isCrewToAgent && !isAgentToTask && !isChatToCrew) {
+      if (!isCrewToAgent && !isAgentToTask && !isChatToCrew && !isWebhookToCrew) {
         console.warn(`[CrewAI Rules] Invalid connection blocked: ${sourceNode.type} -> ${targetNode.type}`);
         return state;
       }
@@ -212,6 +213,14 @@ export const createGraphSlice: StateCreator<AppState, [], [], GraphSlice> = (set
         };
         // This action triggers UI change:
         setTimeout(() => get().setIsChatVisible(true), 0);
+      }
+
+      if (isWebhookToCrew) {
+        newConnection = {
+          ...newConnection,
+          animated: true,
+          style: { stroke: '#f97316', strokeWidth: 2, strokeDasharray: '5 5' }
+        };
       }
 
       let nextNodes = state.nodes;
@@ -303,7 +312,7 @@ export const createGraphSlice: StateCreator<AppState, [], [], GraphSlice> = (set
     });
   },
 
-  addNodeWithAutoPosition: (type: 'agent' | 'task' | 'crew' | 'chat', data: any) => {
+  addNodeWithAutoPosition: (type: 'agent' | 'task' | 'crew' | 'chat' | 'webhook', data: any) => {
     const existingNodes = get().nodes;
     const startX = 600;
     const startY = 100;
@@ -470,6 +479,8 @@ export const createGraphSlice: StateCreator<AppState, [], [], GraphSlice> = (set
         if (!data.name?.trim()) currentErrors.push('Missing Name');
         if (!data.description?.trim()) currentErrors.push('Missing Description');
         if (!data.expected_output?.trim()) currentErrors.push('Missing Expected Output');
+      } else if (node.type === 'webhook') {
+        if (!data.name?.trim()) currentErrors.push('Missing Name');
       }
 
       if (currentErrors.length > 0) {

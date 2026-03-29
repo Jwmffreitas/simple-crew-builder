@@ -5,6 +5,7 @@ import { AgentForm } from './node-config/AgentForm';
 import { TaskForm } from './node-config/TaskForm';
 import { CrewForm } from './node-config/CrewForm';
 import { ChatForm } from './node-config/ChatForm';
+import { WebhookForm } from './node-config/WebhookForm';
 import {
   KeyboardSensor,
   PointerSensor,
@@ -14,7 +15,7 @@ import {
 import {
   sortableKeyboardCoordinates,
 } from '@dnd-kit/sortable';
-import type { AgentNodeData, TaskNodeData, CrewNodeData, ChatNodeData } from '../types/nodes.types';
+import type { AgentNodeData, TaskNodeData, CrewNodeData, ChatNodeData, WebhookNodeData } from '../types/nodes.types';
 
 
 
@@ -53,6 +54,7 @@ export function NodeConfigDrawer() {
     isAgent,
     isTask,
     isChat,
+    isWebhook,
     renderableAgents,
     renderableTasks,
     handleAgentDragEnd,
@@ -65,6 +67,7 @@ export function NodeConfigDrawer() {
     handleFieldChange,
     connectedCrewInputs,
     isChatConnected,
+    allProjectVariables,
     nodeWarnings
   } = useNodeConfig();
 
@@ -272,6 +275,17 @@ export function NodeConfigDrawer() {
             setIsChatMappingSelectorOpen={setIsChatMappingSelectorOpen}
             onFieldKeyDown={handleFieldKeyDown}
             onFieldChange={handleFieldChange}
+          />
+        )}
+
+        {isWebhook && (
+          <WebhookForm
+            data={data as WebhookNodeData}
+            nodeId={activeNode.id}
+            updateNodeData={updateNodeData}
+            onFieldKeyDown={handleFieldKeyDown}
+            onFieldChange={handleFieldChange}
+            allProjectVariables={allProjectVariables}
           />
         )}
       </div>

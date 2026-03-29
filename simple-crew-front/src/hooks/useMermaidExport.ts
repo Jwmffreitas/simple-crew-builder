@@ -17,6 +17,7 @@ export const generateMermaidString = (nodes: AppNode[], edges: AppEdge[], direct
     if (node.type === 'task') shape = `("${name}")`;
     if (node.type === 'crew') shape = `{{ "${name}" }}`;
     if (node.type === 'chat') shape = `[/"${name}"/]`;
+    if (node.type === 'webhook') shape = `{{ "${name}" }}`;
     
     mermaid += `    ${id}${shape}\n`;
   });

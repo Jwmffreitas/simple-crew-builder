@@ -1,3 +1,5 @@
+import json
+import uuid
 import io
 import os
 import shutil
@@ -12,7 +14,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from sqlmodel import Session, select
 from .crew_builder import run_crew_stream
 from .database import init_db, get_session
-from .models import CrewProject, User, Credential, LLMModel, MCPServer, AppSettings, CustomTool, Workspace
+from .models import CrewProject, User, Credential, LLMModel, MCPServer, AppSettings, CustomTool, Workspace, Execution, ExecutionStatus
 from .schemas import (
     GraphData, ProjectCreate, ProjectRead, ProjectUpdate, 
     CredentialCreate, CredentialRead, CredentialUpdate,
@@ -23,7 +25,8 @@ from .schemas import (
     AppSettingsRead, AppSettingsUpdate,
     AiSuggestionRequest, AiSuggestionResponse,
     AiBulkSuggestionRequest, AiBulkSuggestionResponse,
-    AiTaskBulkSuggestionRequest, AiTaskBulkSuggestionResponse
+    AiTaskBulkSuggestionRequest, AiTaskBulkSuggestionResponse,
+    ExecutionRead
 )
 from .exporter import generate_python_project
 from .ai_service import generate_suggestion, generate_bulk_suggestion, generate_task_bulk_suggestion
@@ -128,10 +131,36 @@ async def execute_crew(
 
         # Resolve Custom Tools do Banco de Dados
         graph_data = resolve_custom_tools(graph_data, session)
+        
+        # Extrai inputs do payload enviado root
+        execution_inputs = {}
+        if graph_data.inputs:
+            execution_inputs.update(graph_data.inputs)
+            
+        # Extrai inputs injetados dinamicamente no nó da Crew pelo Chat
+        crew_node = next((n for n in graph_data.nodes if n.type == 'crew'), None)
+        if crew_node and hasattr(crew_node, 'data') and getattr(crew_node.data, 'inputs', None):
+            crew_inputs = getattr(crew_node.data, 'inputs', {})
+            # Remove chaves placeholder se necessário (Opcional para DB)
+            crew_inputs = {k: v for k, v in crew_inputs.items() if not k.startswith('input_')}
+            execution_inputs.update(crew_inputs)
+            
+        # Se mesmo após tudo estiver vazio, para chat o histórico ficaria vazio, mas tentamos nosso melhor
+        # 3. Create Execution record
+        execution = Execution(
+            project_id=uuid.UUID(project_id) if project_id else uuid.UUID(ROOT_USER_ID),
+            status=ExecutionStatus.RUNNING,
+            trigger_type="chat",
+            input_data=execution_inputs,
+            graph_snapshot=graph_data.model_dump()
+        )
+        session.add(execution)
+        session.commit()
+        session.refresh(execution)
 
         # Despacha as dependências e payload JSON para a magia do nosso Parser local CrewAI Stream
         return StreamingResponse(
-            run_crew_stream(graph_data, workspace_id=active_workspace_id), 
+            run_crew_stream(graph_data, workspace_id=active_workspace_id, inputs=execution_inputs, execution_id=execution.id), 
             media_type="text/event-stream"
         )
     except ValueError as ve:
@@ -784,6 +813,187 @@ async def get_file_content(ws_id: str, path: str, session: Session = Depends(get
         raise HTTPException(status_code=500, detail=str(e))
 
 
+import hmac
+import hashlib
+
+def verify_hmac(body: bytes, secret: str, signature: str) -> bool:
+    """Verifica a assinatura HMAC-SHA256 do payload."""
+    if not signature:
+        return False
+    # Remove prefixo 'sha256=' se houver (comum em GitHub/outros)
+    if signature.startswith('sha256='):
+        signature = signature[7:]
+    
+    expected = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, signature)
+
+import re
+
+def resolve_path(data: Any, path: str) -> Optional[Any]:
+    """Resolve a path like 'user.friends[0].name' in data."""
+    # Split by dot or brackets for robust resolution
+    parts = re.split(r'\.|\[|\]', path)
+    parts = [p for p in parts if p] # Remove empty parts
+    
+    val = data
+    for p in parts:
+        if isinstance(val, dict):
+            val = val.get(p)
+        elif isinstance(val, list):
+            try:
+                # Handle numeric index for lists
+                val = val[int(p)]
+            except (ValueError, IndexError, TypeError):
+                return None
+        else:
+            return None
+    return val
+
+def map_payload_to_inputs(payload: Dict[str, Any], mappings: Dict[str, str]) -> Dict[str, Any]:
+    """Mapeia campos do payload para inputs do Crew suportando n8n format e arrays."""
+    inputs = {}
+    if not mappings:
+        return inputs
+        
+    for target_key, source_path in mappings.items():
+        # Suporte ao formato n8n: {{ $json.path.to.key }}
+        path = source_path.strip()
+        if path.startswith('{{') and path.endswith('}}'):
+            path = path[2:-2].strip()
+        if path.startswith('$json.'):
+            path = path[6:]
+            
+        val = resolve_path(payload, path)
+        if val is not None:
+            inputs[target_key] = val
+            
+    return inputs
+
+@app.api_route("/webhook/{slug}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+async def handle_webhook(
+    slug: str, 
+    request: Request, 
+    background_tasks: BackgroundTasks,
+    x_hub_signature: Optional[str] = Header(None, alias="X-Hub-Signature-256"),
+    session: Session = Depends(get_session)
+):
+    """
+    Endpoint dinâmico para triggers de Webhook.
+    Busca o projeto que contém um nó webhook com o path (slug) correspondente.
+    """
+    # 1. Busca todos os projetos para encontrar o que tem o webhook configurado
+    # Em produção com muitos projetos, isso deve ser um índice ou query JSON otimizada.
+    statement = select(CrewProject)
+    projects = session.exec(statement).all()
+    
+    target_project = None
+    target_node = None
+    
+    for p in projects:
+        nodes = p.canvas_data.get("nodes", [])
+        for n in nodes:
+            if n.get("type") == "webhook":
+                node_data = n.get("data", {})
+                if node_data.get("path") == slug:
+                    target_project = p
+                    target_node = n
+                    break
+        if target_project:
+            break
+            
+    if not target_project or not target_node:
+        raise HTTPException(status_code=404, detail=f"Webhook path '/{slug}' não encontrado em nenhum projeto ativo.")
+    
+    data = target_node.get("data", {})
+    
+    # 2. Verificações de Segurança e Estado
+    if data.get("isActive") is False:
+        raise HTTPException(status_code=403, detail="Este webhook está desativado.")
+        
+    # Validar método se especificado
+    if data.get("method") and data.get("method") != request.method:
+        raise HTTPException(status_code=405, detail=f"Método {request.method} não permitido. Use {data.get('method')}")
+
+    # HMAC Verification
+    secret = data.get("secret")
+    body = await request.body()
+    if secret:
+        if not verify_hmac(body, secret, x_hub_signature):
+            raise HTTPException(status_code=401, detail="Assinatura HMAC inválida.")
+
+    # 3. Preparação de Inputs
+    payload = {}
+    if body:
+        try:
+            payload = await request.json()
+        except:
+            # Tenta form data se falhar JSON
+            try:
+                form_data = await request.form()
+                payload = dict(form_data)
+            except:
+                pass
+                
+    mappings = data.get("fieldMappings", {})
+    mapped_inputs = map_payload_to_inputs(payload, mappings)
+    
+    # Se não houver mappings, injeta o payload inteiro em 'webhook_payload' como fallback
+    if not mapped_inputs:
+        mapped_inputs = {"webhook_payload": payload}
+
+    # 4. Execução
+    graph_data = GraphData(**target_project.canvas_data)
+    workspace_id = target_project.workspace_id
+    
+    # 5. Create Execution record
+    execution = Execution(
+        project_id=target_project.id,
+        status=ExecutionStatus.RUNNING,
+        trigger_type="webhook",
+        input_data=mapped_inputs,
+        graph_snapshot=target_project.canvas_data
+    )
+    session.add(execution)
+    session.commit()
+    session.refresh(execution)
+
+    if data.get("waitForResult") is True:
+        # Síncrono: Consome o stream e retorna o resultado final
+        final_result = ""
+        try:
+            stream = run_crew_stream(graph_data, workspace_id=workspace_id, inputs=mapped_inputs, execution_id=execution.id)
+            for event_str in stream:
+                if not event_str.strip():
+                    continue
+                event = json.loads(event_str)
+                if event.get("type") == "final_result":
+                    final_result = event.get("result", "")
+                elif event.get("type") == "error":
+                    raise Exception(event.get("error"))
+            
+            return {
+                "status": "success",
+                "webhook": slug,
+                "project": target_project.name,
+                "output": final_result
+            }
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Erro na execução síncrona: {str(e)}")
+    else:
+        # Assíncrono: Dispara em background
+        def run_in_background():
+            # Precisamos consumir o generator para ele rodar
+            for _ in run_crew_stream(graph_data, workspace_id=workspace_id, inputs=mapped_inputs, execution_id=execution.id):
+                pass
+        
+        background_tasks.add_task(run_in_background)
+        return {
+            "status": "accepted",
+            "message": "Execução iniciada em background.",
+            "webhook": slug,
+            "project": target_project.name
+        }
+
 @app.get("/api/v1/workspaces/{ws_id}/download-zip")
 async def download_workspace_zip(
     ws_id: str, 
@@ -898,6 +1108,19 @@ async def delete_workspace_file(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# --- Execution History Endpoints ---
+@app.get("/api/v1/projects/{project_id}/executions", response_model=List[ExecutionRead])
+async def list_project_executions(project_id: str, session: Session = Depends(get_session)):
+    statement = select(Execution).where(Execution.project_id == uuid.UUID(project_id)).order_by(Execution.timestamp.desc())
+    return session.exec(statement).all()
+
+@app.get("/api/v1/executions/{execution_id}", response_model=ExecutionRead)
+async def get_execution(execution_id: str, session: Session = Depends(get_session)):
+    execution = session.get(Execution, uuid.UUID(execution_id))
+    if not execution:
+        raise HTTPException(status_code=404, detail="Execução não encontrada")
+    return execution
 
 # --- Settings Endpoints ---
 @app.get("/api/v1/settings", response_model=AppSettingsRead)
